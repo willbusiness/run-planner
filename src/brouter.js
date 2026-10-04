@@ -7,10 +7,15 @@ const BASE = 'https://brouter.de/brouter';
 const PROFILES = { road: 'shortest', mixed: 'trekking', trail: 'hiking-mountain' };
 
 let inflight = 0;
+let nextAt = 0;
 const waiters = [];
+// the public server is a free community service: at most 2 requests in flight, started >= 1.1 s apart
 async function slot() {
   while (inflight >= 2) await new Promise((r) => waiters.push(r));
   inflight++;
+  const at = Math.max(Date.now(), nextAt);
+  nextAt = at + 1100;
+  if (at > Date.now()) await new Promise((r) => setTimeout(r, at - Date.now()));
 }
 function free() {
   inflight--;
@@ -25,6 +30,14 @@ function bucketOf(wayTags) {
   if (tags.highway === 'track') return 'gravel';
   if (PAVED_HW.has(tags.highway)) return 'paved';
   return 'unknown';
+}
+
+const PATH_HW = new Set(['footway', 'path', 'cycleway', 'pedestrian', 'track', 'bridleway', 'steps', 'corridor']);
+const MAIN_HW = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link']);
+/** path = off-road/footpath, main = busy road, street = everything else. */
+function kindOf(wayTags) {
+  const hw = /(?:^| )highway=([^ ]+)/.exec(wayTags)?.[1];
+  return PATH_HW.has(hw) ? 'path' : MAIN_HW.has(hw) ? 'main' : 'street';
 }
 
 /** Route through all points in ONE request, then split the result into one entry per consecutive pair. */
@@ -83,6 +96,7 @@ export async function route(points, prefs) {
   // surface per message segment, assigned to the leg that contains it
   const rows = (f.properties.messages || []).slice(1);
   const legSurf = points.slice(1).map(() => ({ paved: 0, gravel: 0, dirt: 0, unknown: 0 }));
+  const legKinds = points.slice(1).map(() => ({ path: 0, street: 0, main: 0 }));
   let at = 0;
   for (const r of rows) {
     const d = +r[3] || 0;
@@ -91,6 +105,7 @@ export async function route(points, prefs) {
     let leg = idx.findIndex((k, n) => n > 0 && mid <= cum[k]) - 1;
     if (leg < 0) leg = legSurf.length - 1;
     legSurf[leg][bucketOf(r[9] || '')] += d;
+    legKinds[leg][kindOf(r[9] || '')] += d;
   }
-  return points.slice(1).map((_, i) => ({ coords: all.slice(idx[i], idx[i + 1] + 1), surf: legSurf[i] }));
+  return points.slice(1).map((_, i) => ({ coords: all.slice(idx[i], idx[i + 1] + 1), surf: legSurf[i], kinds: legKinds[i] }));
 }

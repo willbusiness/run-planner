@@ -30,7 +30,7 @@ export function drawProfile(canvas, an, { onScrub, compact = false } = {}) {
     const n = an.d.length;
     if (n < 2) return;
     const css = getComputedStyle(canvas);
-    const ink = css.getPropertyValue('--ink-soft').trim() || '#667';
+    const ink = css.getPropertyValue('--ink-2').trim() || '#667';
     const grid = css.getPropertyValue('--line').trim() || '#ddd';
 
     const padL = compact ? 2 : 34, padR = 4, padT = 6, padB = compact ? 2 : 16;

@@ -48,16 +48,25 @@ export function addSurf(a, b) {
   return a;
 }
 
+export function emptyKinds() {
+  return { path: 0, street: 0, main: 0 };
+}
+
+export function addKinds(a, b) {
+  for (const k of Object.keys(a)) a[k] += b?.[k] || 0;
+  return a;
+}
+
 /** Everything the UI needs about a coordinate list. */
-export function summarize(coords, surf = emptySurf()) {
+export function summarize(coords, surf = emptySurf(), kinds = emptyKinds()) {
   const an = analyze(coords);
-  return { coords, an, surf, dist: an.dist, gain: an.gain, loss: an.loss, time: estimateTime(an) };
+  return { coords, an, surf, kinds, dist: an.dist, gain: an.gain, loss: an.loss, time: estimateTime(an) };
 }
 
 /** Hills category from metres climbed per km. */
 export function hillClass(gain, dist) {
   const perKm = gain / Math.max(0.1, dist / 1000);
-  return perKm < 7 ? 'flat' : perKm < 16 ? 'rolling' : 'hilly';
+  return perKm < 9 ? 'flat' : perKm < 18 ? 'rolling' : 'hilly';
 }
 
 export const SURFACE_COLORS = { paved: '#6b7a8f', gravel: '#d9a441', dirt: '#8a5a2b', unknown: '#c3c8d0' };

@@ -5,31 +5,25 @@ const defaults = {
   orsKey: '',
   pace: 330, // goal pace, seconds per km
   units: 'km', // 'km' | 'mi'
-  basemap: 'light', // 'light' | 'osm' | 'topo' | 'dark'
-  layers: { trails: true, ovals: false, water: false, routes: true },
+  theme: 'auto', // 'auto' | 'light' | 'dark'
+  home: null, // {lat, lng, name} once the user sets it
+  trails: false, // emphasise running paths on the map
   prefs: {
+    km: 12, // target distance
     surface: 'mixed', // 'road' | 'mixed' | 'trail'
-    quiet: false, // avoid busy roads
-    green: false, // prefer parks and greenery
+    shape: 'loop', // 'loop' | 'out&back'
+    hills: 'any', // 'any' | 'flat' | 'hilly'
+    quiet: false, // avoid busy roads (OpenRouteService only)
+    green: false, // prefer parks (OpenRouteService only)
     avoidStairs: true,
-    hills: 'any', // 'any' | 'flat' | 'rolling' | 'hilly'
-    shape: 'any', // 'any' | 'loop' | 'out&back'
-    minKm: 8,
-    maxKm: 14,
   },
 };
 
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-    if (saved.v !== 2) { delete saved.basemap; delete saved.layers; } // v2: calmer default map + overlays
-    return {
-      v: 2,
-      ...defaults,
-      ...saved,
-      layers: { ...defaults.layers, ...saved.layers },
-      prefs: { ...defaults.prefs, ...saved.prefs },
-    };
+    if (saved.v !== 3) { delete saved.prefs; delete saved.basemap; delete saved.layers; }
+    return { v: 3, ...defaults, ...saved, prefs: { ...defaults.prefs, ...saved.prefs } };
   } catch {
     return structuredClone(defaults);
   }

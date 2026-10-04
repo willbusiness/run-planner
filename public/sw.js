@@ -1,6 +1,6 @@
 // Minimal service worker: makes the app installable and loads the shell offline.
 // HTML is network-first (so deploys show up immediately); hashed assets are cache-first.
-const CACHE = 'run-planner-v1';
+const CACHE = 'run-planner-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {

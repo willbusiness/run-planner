@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
   <title>Run Planner</title>
-  <meta name="theme-color" content="#ff5a1f" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Run Planner" />
@@ -15,35 +15,9 @@
 </head>
 <body>
   <div id="map"></div>
-
-  <header id="topbar">
-    <nav class="tabs" role="tablist">
-      <button class="tab" data-tab="explore" role="tab">Explore</button>
-      <button class="tab" data-tab="plan" role="tab">Plan</button>
-      <button class="tab" data-tab="saved" role="tab">Saved</button>
-    </nav>
-    <div class="topbtns">
-      <button id="btn-locate" class="fab" title="My location" aria-label="My location"></button>
-      <button id="btn-layers" class="fab" title="Map layers" aria-label="Map layers"></button>
-      <button id="btn-settings" class="fab" title="Settings" aria-label="Settings"></button>
-    </div>
-  </header>
-
-  <button id="searchpill" hidden>Search this area</button>
-  <div id="layers-pop" hidden></div>
-
-  <aside id="panel">
-    <div id="grab" aria-label="Resize panel"><span></span></div>
-    <div id="panel-body">
-      <section id="view-explore" class="view"></section>
-      <section id="view-plan" class="view" hidden></section>
-      <section id="view-saved" class="view" hidden></section>
-    </div>
-  </aside>
-
+  <aside id="panel"></aside>
+  <div class="mapctl" id="mapctl"></div>
   <div id="toast" role="status"></div>
-  <dialog id="settings"></dialog>
-
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

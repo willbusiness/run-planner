@@ -2,7 +2,7 @@
 // A leg is either 'snap' (routed along paths by ORS) or 'free' (straight line, for ovals/grass/parks).
 import * as routing from './routing.js';
 import { withElevation } from './elevation.js';
-import { summarize, emptySurf, addSurf } from './stats.js';
+import { summarize, emptySurf, addSurf, emptyKinds, addKinds } from './stats.js';
 import { settings } from './settings.js';
 
 const fmt = (p) => p[0].toFixed(5) + ',' + p[1].toFixed(5);
@@ -49,7 +49,7 @@ export class Route extends EventTarget {
   }
   restore(s) {
     this.waypoints = s.wps.map((p) => [...p]);
-    this.legs = s.modes.map((mode) => ({ mode, status: 'pending', key: '', coords: [], surf: emptySurf() }));
+    this.legs = s.modes.map((mode) => this.pendingLeg(mode));
     this.refresh();
   }
   undo() {
@@ -142,11 +142,16 @@ export class Route extends EventTarget {
     this.undoStack.length = 0;
     this.redoStack.length = 0;
     this.waypoints = waypoints.map((p) => [p[0], p[1]]);
-    this.legs = legs.map((l) => ({ mode: l.mode || 'snap', status: 'ok', key: '', coords: l.coords, surf: l.surf || emptySurf() }));
+    this.legs = legs.map((l) => ({ mode: l.mode || 'snap', status: 'ok', key: '', coords: l.coords, surf: l.surf || emptySurf(), kinds: l.kinds || emptyKinds() }));
     this.name = name;
     this.tag = tag;
     this.savedId = savedId;
-    this.legs.forEach((l, i) => (l.key = legKey(l.mode, this.waypoints[i], this.waypoints[i + 1])));
+    // remember the loaded legs, so undo and drag-back never need the network
+    const pk = routing.prefsKey({ ...settings.prefs });
+    this.legs.forEach((l, i) => {
+      l.key = legKey(l.mode, this.waypoints[i], this.waypoints[i + 1]);
+      if (l.coords.length > 1) cache.set(l.key + '|' + (l.mode === 'snap' ? pk : ''), { coords: l.coords, surf: l.surf, kinds: l.kinds });
+    });
     this.changed();
   }
 
@@ -170,7 +175,7 @@ export class Route extends EventTarget {
 
   // ---- computing legs ----
   pendingLeg(mode) {
-    return { mode, status: 'pending', key: '', coords: [], surf: emptySurf() };
+    return { mode, status: 'pending', key: '', coords: [], surf: emptySurf(), kinds: emptyKinds() };
   }
 
   /** Recompute any leg whose endpoints changed. Cheap to call; cached legs resolve instantly. */
@@ -216,6 +221,7 @@ export class Route extends EventTarget {
         }
         result = { coords, surf: { ...emptySurf(), dirt: 0, unknown: 0 } };
         result.surf.unknown = Math.hypot((b[0] - a[0]) * 111000, (b[1] - a[1]) * 93000);
+        result.kinds = { ...emptyKinds(), path: result.surf.unknown };
       } else {
         const [r] = await routing.route([a, b], prefs);
         result = r;
@@ -252,8 +258,9 @@ export class Route extends EventTarget {
 
   summary() {
     const surf = emptySurf();
-    this.legs.forEach((l) => l.status === 'ok' && addSurf(surf, l.surf));
-    return summarize(fillElevation(this.coords()), surf);
+    const kinds = emptyKinds();
+    this.legs.forEach((l) => l.status === 'ok' && (addSurf(surf, l.surf), addKinds(kinds, l.kinds)));
+    return summarize(fillElevation(this.coords()), surf, kinds);
   }
 
   // ---- persistence ----
@@ -266,6 +273,7 @@ export class Route extends EventTarget {
       legs: this.legs.map((l) => ({
         mode: l.mode,
         surf: l.surf,
+        kinds: l.kinds,
         c: l.status === 'ok' ? l.coords.map((c) => [r(c[0], 1e5), r(c[1], 1e5), c[2] == null ? null : r(c[2], 10)]) : [],
       })),
     };
@@ -274,7 +282,7 @@ export class Route extends EventTarget {
   loadJSON(j, extra = {}) {
     this.load(
       j.wps,
-      j.legs.map((l) => ({ mode: l.mode, surf: l.surf, coords: l.c })),
+      j.legs.map((l) => ({ mode: l.mode, surf: l.surf, kinds: l.kinds, coords: l.c })),
       { name: j.name, tag: j.tag, ...extra },
     );
     // any leg saved without geometry gets recomputed
