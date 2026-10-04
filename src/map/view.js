@@ -2,13 +2,16 @@
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'; // bundled with its dependencies by Vite
-import { buildStyle, chevronImage } from './style.js';
+import { buildStyle, chevronImage, gradientTo, ACCENT } from './style.js';
 
 maplibregl.setWorkerUrl(workerUrl);
 
 export let map;
 const cache = {}; // source id -> last data, so a theme switch can restore it
 let theme = 'light';
+let touched = false; // the runner has moved the map themselves: stop moving it for them
+export const mapTouched = () => touched;
+export const resetTouched = () => { touched = false; };
 
 const FC = (features) => ({ type: 'FeatureCollection', features });
 export const lineFeature = (coords, props = {}) => ({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: coords.map((c) => [c[1], c[0]]) } });
@@ -29,6 +32,7 @@ export function createMap(container, { center, zoom, dark }) {
     fadeDuration: 120,
   });
   map.touchZoomRotate.disableRotation();
+  for (const ev of ['pointerdown', 'wheel', 'touchstart']) container.addEventListener(ev, () => (touched = true), { passive: true });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   map.on('styleimagemissing', (e) => { if (e.id === 'chevron' && !map.hasImage('chevron')) map.addImage('chevron', chevronImage()); });
   map.on('load', () => { if (!map.hasImage('chevron')) map.addImage('chevron', chevronImage()); });
@@ -57,3 +61,21 @@ export function setTrailsVisible(on) {
 }
 
 export { maplibregl };
+
+let anim = 0;
+/** Make the selected route draw itself from the start. */
+export function revealSelected(ms = 700) {
+  cancelAnimationFrame(anim);
+  const casing = theme === 'dark' ? '#0b0d10' : '#ffffff';
+  const t0 = performance.now();
+  const frame = (now) => {
+    const t = Math.min(1, (now - t0) / ms);
+    const e = 1 - (1 - t) ** 3; // ease out
+    if (map.getLayer('sel-line')) {
+      map.setPaintProperty('sel-line', 'line-gradient', gradientTo(e, ACCENT));
+      map.setPaintProperty('sel-casing', 'line-gradient', gradientTo(e, casing));
+    }
+    if (t < 1) anim = requestAnimationFrame(frame);
+  };
+  anim = requestAnimationFrame(frame);
+}

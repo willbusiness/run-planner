@@ -17,7 +17,7 @@ function db() {
   });
   return dbp;
 }
-async function kvGet(key) {
+export async function kvGet(key) {
   try {
     const d = await db();
     return await new Promise((res) => {
@@ -29,7 +29,7 @@ async function kvGet(key) {
     return undefined;
   }
 }
-async function kvSet(key, value) {
+export async function kvSet(key, value) {
   try {
     const d = await db();
     d.transaction('kv', 'readwrite').objectStore('kv').put(value, key);
@@ -100,8 +100,25 @@ class Bank extends EventTarget {
     const saved = await kvGet(key);
     if (this.key !== key) return; // switched again while loading
     this.items = Array.isArray(saved) ? saved : [];
+    if (!this.items.length) this.items = await this.loadSeed(key);
+    if (this.key !== key) return;
     this.emit();
     this.fill();
+  }
+
+  /** Routes shipped with the app for a known start (see scripts/seed.mjs), so a new device starts with a full bank. */
+  async loadSeed(key) {
+    const [ll, surface] = key.split('|');
+    const [lat, lng] = ll.split(',');
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}seed/${lat}_${lng}_${surface}.json`);
+      if (!res.ok || !(res.headers.get('content-type') || '').includes('json')) return [];
+      const items = await res.json();
+      kvSet(key, items);
+      return Array.isArray(items) ? items : [];
+    } catch {
+      return [];
+    }
   }
 
   add(rec) {
@@ -128,7 +145,7 @@ class Bank extends EventTarget {
   /** Routes that fit a brief, best first, no two nearly identical. */
   query(brief, limit = 8) {
     const T = brief.km * 1000;
-    const tol = Math.max(350, T * 0.06);
+    const tol = Math.max(400, T * 0.08);
     const fits = (wide) => this.items.filter((r) => r.kind === brief.shape && Math.abs(r.dist - T) <= tol * wide);
     let pool = fits(1);
     if (pool.length < 3) pool = fits(1.8);
@@ -194,7 +211,7 @@ class Bank extends EventTarget {
       this.running++;
       this.run(job).finally(() => {
         this.running--;
-        setTimeout(() => this.pump(), job.urgent ? 100 : 3500);
+        setTimeout(() => this.pump(), job.urgent ? 100 : 1800);
         this.emit();
       });
     }

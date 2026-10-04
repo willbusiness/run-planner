@@ -6,7 +6,7 @@ import { applyTheme, isDark } from './theme.js';
 import { init, state, bus, select } from './app.js';
 import { mountPanel } from './ui/panel.js';
 import { mountMapControls } from './ui/mapctl.js';
-import { openEditor, closeEditor, editing, undoRoute, redoRoute } from './ui/editor.js';
+import { openEditor, closeEditor, editing, undoRoute, redoRoute, currentRoute } from './ui/editor.js';
 import { routeFromRecord } from './recroute.js';
 import { Route } from './route.js';
 import { parseShareHash } from './storage.js';
@@ -65,4 +65,4 @@ addEventListener('keydown', (e) => {
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {}));
 }
-if (import.meta.env.DEV) window.__rp = { state, bank, map, bus };
+if (import.meta.env.DEV) window.__rp = { state, bank, map, bus, currentRoute };

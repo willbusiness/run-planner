@@ -91,7 +91,7 @@ class EditLayer {
       if (i === 0) el.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/></svg>';
       if (last) el.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4h11l-2 4 2 4H6"/></svg>';
       const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([p[1], p[0]]).addTo(map);
-      m.on('dragstart', () => { this.hideGhost(); this.route.push(); this.dragIdx = i; this.suppressClick = true; closeMenu(); });
+      m.on('dragstart', () => { this.hideGhost(); this.route.push(); this.route.fast = true; this.dragIdx = i; this.suppressClick = true; closeMenu(); });
       m.on('drag', () => {
         const ll = m.getLngLat();
         wps[i] = [ll.lat, ll.lng];
@@ -101,6 +101,7 @@ class EditLayer {
       m.on('dragend', () => {
         clearTimeout(this.liveTimer);
         this.dragIdx = -1;
+        this.route.fast = false;
         setTimeout(() => (this.suppressClick = false), 50);
         this.route.moveWaypoint(i, wps[i]);
       });
@@ -113,7 +114,7 @@ class EditLayer {
   live() {
     const now = Date.now();
     clearTimeout(this.liveTimer);
-    const gap = usingOrs() ? 700 : 1100; // be kind to the free public router
+    const gap = usingOrs() ? 700 : 900; // be kind to the free public router
     if (now - (this.lastLive || 0) > gap) {
       this.lastLive = now;
       this.route.refresh();
@@ -170,6 +171,7 @@ class EditLayer {
       const idx = this.ghostLeg + 1;
       const ll = m.getLngLat();
       this.route.insertWaypoint(idx, [ll.lat, ll.lng], { refresh: false });
+      this.route.fast = true;
       this.dragIdx = idx;
     });
     m.on('drag', () => {
@@ -184,6 +186,7 @@ class EditLayer {
       const idx = this.dragIdx;
       this.draggingGhost = false;
       this.dragIdx = -1;
+      this.route.fast = false;
       setTimeout(() => (this.suppressClick = false), 50);
       this.hideGhost();
       this.route.moveWaypoint(idx, [ll.lat, ll.lng]);

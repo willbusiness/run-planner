@@ -2,7 +2,7 @@
 // UI modules listen to `bus` events; the map is updated from here.
 import { bank } from './bank.js';
 import { settings, save } from './settings.js';
-import { map } from './map/view.js';
+import { map, revealSelected, mapTouched, resetTouched } from './map/view.js';
 import { drawResults, clearResults, fitCoords, setStartMarker, wireMapPicking, onRouteClick, onRouteHover } from './map/routes.js';
 
 export const DEFAULT_HOME = { lat: -33.8975, lng: 151.2335, name: 'Centennial Park' };
@@ -57,6 +57,7 @@ export function setStart(ll, name, { home = false, fly = false } = {}) {
   setStartMarker(ll, { onDrag: (p) => setStart(p, 'Dropped pin') });
   state.selectedId = null;
   state.userPicked = false;
+  resetTouched();
   wantFit = true;
   emit('start');
   briefChanged({ immediate: true });
@@ -73,6 +74,7 @@ export function briefChanged({ immediate = false } = {}) {
     wantFit = true;
     state.selectedId = null; // pick the best of the new set
     state.userPicked = false;
+    resetTouched();
     refresh();
   };
   if (immediate) go();
@@ -87,9 +89,10 @@ export function refresh() {
   // until the runner picks one, the best match stays selected as better ones stream in
   if (!state.userPicked || !state.results.some((r) => r.id === state.selectedId)) state.selectedId = first;
   draw();
-  if (state.selectedId && (wantFit || prev !== state.selectedId) && wantFit) {
+  if (state.selectedId && (wantFit || (prev !== state.selectedId && !mapTouched()))) {
     wantFit = false;
     fitCoords(selected().c);
+    revealSelected(900);
   }
   emit('results');
 }
@@ -104,6 +107,7 @@ export function select(id, { fit = true, user = true } = {}) {
   if (state.selectedId === id) return emit('select');
   state.selectedId = id;
   draw();
+  revealSelected();
   const r = selected();
   if (r && fit) fitCoords(r.c, { duration: 650 });
   emit('select');

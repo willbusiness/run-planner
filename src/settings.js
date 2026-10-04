@@ -30,7 +30,7 @@ function load() {
 }
 
 export const settings = load();
-export const bus = window;
+export const bus = typeof window !== 'undefined' ? window : new EventTarget();
 
 export function save() {
   try {

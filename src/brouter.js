@@ -8,13 +8,15 @@ const PROFILES = { road: 'shortest', mixed: 'trekking', trail: 'hiking-mountain'
 
 let inflight = 0;
 let nextAt = 0;
+let spacing = 1100;
+export const setSpacing = (ms) => { spacing = ms; };
 const waiters = [];
 // the public server is a free community service: at most 2 requests in flight, started >= 1.1 s apart
 async function slot() {
   while (inflight >= 2) await new Promise((r) => waiters.push(r));
   inflight++;
   const at = Math.max(Date.now(), nextAt);
-  nextAt = at + 1100;
+  nextAt = at + spacing;
   if (at > Date.now()) await new Promise((r) => setTimeout(r, at - Date.now()));
 }
 function free() {

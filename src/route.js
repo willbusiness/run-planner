@@ -1,6 +1,7 @@
 // The route being edited in Plan mode: waypoints, one leg between each pair, undo/redo.
 // A leg is either 'snap' (routed along paths by ORS) or 'free' (straight line, for ovals/grass/parks).
 import * as routing from './routing.js';
+import { Superseded } from './valhalla.js';
 import { withElevation } from './elevation.js';
 import { summarize, emptySurf, addSurf, emptyKinds, addKinds } from './stats.js';
 import { settings } from './settings.js';
@@ -28,6 +29,7 @@ export class Route extends EventTarget {
     this.savedId = null;
     this.undoStack = [];
     this.redoStack = [];
+    this.fast = false; // true while dragging: skip the slower surface lookup
   }
 
   // ---- change notification ----
@@ -180,7 +182,7 @@ export class Route extends EventTarget {
 
   /** Recompute any leg whose endpoints changed. Cheap to call; cached legs resolve instantly. */
   refresh() {
-    const prefs = { ...settings.prefs };
+    const prefs = { ...settings.prefs, fast: this.fast };
     const pk = routing.prefsKey(prefs);
     this.legs.forEach((leg, i) => {
       const a = this.waypoints[i];
@@ -223,14 +225,15 @@ export class Route extends EventTarget {
         result.surf.unknown = Math.hypot((b[0] - a[0]) * 111000, (b[1] - a[1]) * 93000);
         result.kinds = { ...emptyKinds(), path: result.surf.unknown };
       } else {
-        const [r] = await routing.route([a, b], prefs);
+        const [r] = await routing.route([a, b], { ...prefs, stale: () => !this.legs.includes(leg) || leg.key !== key });
         result = r;
       }
       if (!this.legs.includes(leg) || leg.key !== key) return; // superseded by a newer edit
-      cache.set(key + '|' + (leg.mode === 'snap' ? pk : ''), result);
+      if (!prefs.fast) cache.set(key + '|' + (leg.mode === 'snap' ? pk : ''), result); // quick drag results lack surface data
       Object.assign(leg, result, { status: 'ok' });
+      result.late?.then(() => this.legs.includes(leg) && this.changed()); // surface info arrives a moment later
     } catch (e) {
-      if (!this.legs.includes(leg) || leg.key !== key) return;
+      if (e instanceof Superseded || !this.legs.includes(leg) || leg.key !== key) return;
       leg.status = 'error';
       leg.error = e.message;
       this.fail(e.message);

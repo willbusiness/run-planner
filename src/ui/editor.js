@@ -9,6 +9,7 @@ import { profileCanvas, surfaceBar, splitsTable } from './widgets.js';
 import { saveRoute, shareHash } from '../storage.js';
 import { toGPX, download, safeName, parseGPX } from '../gpx.js';
 import { showView } from './panel.js';
+import * as valhalla from '../valhalla.js';
 
 let route = null;
 let root = null;
@@ -104,6 +105,7 @@ function buildEditor() {
     ),
     surf: h('div', { class: 'sect' }),
     splits: h('div', { class: 'sect' }),
+    dirs: h('div', { class: 'sect' }),
     actions: h('div', { class: 'sect' }),
   };
   const file = h('input', { type: 'file', accept: '.gpx', hidden: true, onchange: importGpx });
@@ -120,7 +122,7 @@ function buildEditor() {
     h('div', { class: 'ehead' },
       iconBtn('back', 'Back', () => closeEditor(true)),
       nameInput, undo, redo),
-    els.stats, els.msg, els.chart, els.tools, els.surf, els.splits, els.actions);
+    els.stats, els.msg, els.chart, els.tools, els.surf, els.splits, els.dirs, els.actions);
 }
 
 let renderTimer;
@@ -168,10 +170,25 @@ function paint() {
         h('summary', { style: { cursor: 'pointer', fontWeight: 650, padding: '4px 0' } }, `Splits per ${settings.units === 'mi' ? 'mile' : 'km'}`),
         splitsTable(sum.an)),
     );
+    els.dirs.replaceChildren(h('details', { ontoggle: (e) => e.target.open && loadDirections(e.target) },
+      h('summary', { style: { cursor: 'pointer', fontWeight: 650, padding: '4px 0' } }, 'Directions'),
+      h('div', { class: 'dirs' }, h('span', { class: 'hint', style: { padding: 0 } }, 'Loading…'))));
   } else if (!ready) {
+    els.dirs.replaceChildren();
     els.chart.replaceChildren();
     els.surf.replaceChildren();
     els.splits.replaceChildren();
+  }
+}
+
+async function loadDirections(details) {
+  const box = details.querySelector('.dirs');
+  if (route.legs.some((l) => l.mode === 'free')) return box.replaceChildren(h('span', { class: 'hint', style: { padding: 0 } }, 'Directions are not available for freehand legs.'));
+  try {
+    const list = await valhalla.directions(route.waypoints, { ...settings.prefs });
+    box.replaceChildren(...list.map((d) => h('div', { class: 'dir' }, h('span', { class: 'dkm' }, d.at.toFixed(1)), h('span', null, d.text))));
+  } catch (e) {
+    box.replaceChildren(h('span', { class: 'hint', style: { padding: 0 } }, 'Could not load directions right now.'));
   }
 }
 
@@ -200,6 +217,7 @@ async function copyLink() {
 }
 
 export const editing = () => !!route;
+export const currentRoute = () => route;
 export const undoRoute = () => route?.undo();
 export const redoRoute = () => route?.redo();
 bus.addEventListener('units', () => paint());

@@ -4,7 +4,7 @@ import * as routing from './routing.js';
 import { elevations } from './elevation.js';
 import { destination, pathLength } from './geo.js';
 import { summarize, emptySurf, addSurf, emptyKinds, addKinds, hillClass, estimateTime } from './stats.js';
-import { trimSpurs, shapeMetrics, nearestIndex } from './clean.js';
+import { trimSpurs, shapeMetrics, nearestIndex, simplify } from './clean.js';
 
 // Learned ratio of real route length to straight-line polygon length. Improves with every route,
 // so most candidates land close to their target on the first try.
@@ -62,6 +62,7 @@ const waypointsOf = (start, c) => [start, ...c.shape.map(([x, y]) => toLL(start,
 async function routeCandidate(start, c, prefs) {
   const wps = waypointsOf(start, c);
   const legs = await routing.route(c.kind === 'loop' ? wps : [wps[0], wps[1]], prefs);
+  await legs[0]?.late; // surface and path information (Valhalla fills it in a moment after the geometry)
   const surf = emptySurf();
   const kinds = emptyKinds();
   let raw = [];
@@ -161,16 +162,17 @@ export async function makeRoute({ start, kind, target, prefs, seed = Date.now() 
   }
   if (Math.abs(r.dist - target) / target > 0.15) return null;
 
-  const q = shapeMetrics(r.coords);
-  if (kind === 'loop' && (q.backtrack > 0.12 || q.compact < 0.22)) return null;
+  const line = simplify(r.coords, 2);
+  const q = shapeMetrics(line);
+  if (kind === 'loop' && (q.backtrack > 0.1 || q.compact < 0.28 || q.turnsPerKm > 3.5)) return null;
 
-  const sum = summarize(r.coords, r.surf, r.kinds);
+  const sum = summarize(line, r.surf, r.kinds);
   return {
     id: `${kind[0]}${Math.round(r.dist)}-${seed.toString(36)}`,
     kind,
     surface: prefs.surface,
     wps: r.points.map((p) => [r5(p[0]), r5(p[1])]),
-    c: r.coords.map((p) => [r5(p[0]), r5(p[1]), p[2] == null ? null : r1(p[2])]),
+    c: line.map((p) => [r5(p[0]), r5(p[1]), p[2] == null ? null : r1(p[2])]),
     surf: r.surf,
     kinds: r.kinds,
     dist: Math.round(sum.dist),

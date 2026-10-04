@@ -148,7 +148,7 @@ button { cursor: pointer; border: 0; background: none; padding: 0; }
 
 .cards { display: grid; gap: 4px; padding: 0 10px; }
 .card { border-radius: 18px; padding: 10px; cursor: pointer; transition: background 0.15s; position: relative; }
-.card:hover { background: var(--panel-2); }
+.card:hover, .card.hl { background: var(--panel-2); }
 .card.sel { background: var(--panel-2); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .card.enter { animation: rise 0.45s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms); }
 @keyframes rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
@@ -211,6 +211,9 @@ button { cursor: pointer; border: 0; background: none; padding: 0; }
 .splits th { text-align: right; color: var(--ink-3); font-weight: 600; font-size: 11px; padding: 4px 6px; }
 .splits td { text-align: right; padding: 5px 6px; border-top: 1px solid var(--line); }
 .splits th:first-child, .splits td:first-child { text-align: left; }
+.dirs { display: grid; gap: 2px; padding-top: 6px; }
+.dir { display: grid; grid-template-columns: 38px 1fr; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.dkm { color: var(--ink-3); font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
 .up { color: #d9480f; } .dn { color: #1c7ed6; }
 
 /* ---------- map furniture ---------- */

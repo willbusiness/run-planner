@@ -3,6 +3,7 @@
 import base from './positron.json';
 
 export const ACCENT = '#ff5a1f';
+export const gradientTo = (t, color) => (t >= 1 ? ['interpolate', ['linear'], ['line-progress'], 0, color, 1, color] : ['step', ['line-progress'], color, Math.max(0.0001, t), 'rgba(0,0,0,0)']);
 
 const LIGHT = {
   land: '#f3f2ee',
@@ -127,8 +128,8 @@ function routeLayers(dark) {
       { id: 'alts-casing', type: 'line', source: 'alts', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': casing, 'line-width': ZOOM_W(3.5, 7), 'line-opacity': ['case', ['boolean', ['get', 'dim'], false], 0.25, 0.7] } },
       { id: 'alts-line', type: 'line', source: 'alts', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': alt, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['boolean', ['get', 'hover'], false], 4.5, 2], 17, ['case', ['boolean', ['get', 'hover'], false], 8, 4]], 'line-opacity': ['case', ['boolean', ['get', 'hover'], false], 1, ['boolean', ['get', 'dim'], false], 0.3, 0.6] } },
       // the selected route: white casing, accent line
-      { id: 'sel-casing', type: 'line', source: 'sel', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': casing, 'line-width': ZOOM_W(8, 13) } },
-      { id: 'sel-line', type: 'line', source: 'sel', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ACCENT, 'line-width': ZOOM_W(5, 8) } },
+      { id: 'sel-casing', type: 'line', source: 'sel', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, casing, 1, casing], 'line-width': ZOOM_W(8, 13) } },
+      { id: 'sel-line', type: 'line', source: 'sel', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, ACCENT, 1, ACCENT], 'line-width': ZOOM_W(5, 8) } },
       { id: 'sel-arrows', type: 'symbol', source: 'sel', minzoom: 12.5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'icon-image': 'chevron', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 17, 0.62], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map' } },
       // legs still being routed or failed: dashed rubber band
       { id: 'pending-line', type: 'line', source: 'pending', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['case', ['==', ['get', 'state'], 'error'], '#e5484d', ACCENT], 'line-width': 3, 'line-dasharray': [0.1, 2.2], 'line-opacity': 0.95 } },

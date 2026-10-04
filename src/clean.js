@@ -157,3 +157,28 @@ export function nearestIndex(coords, ll, from = 0) {
   }
   return at;
 }
+
+/** Douglas-Peucker: drop points that sit within `tol` metres of the straight line between their neighbours. */
+export function simplify(coords, tol = 2) {
+  if (coords.length < 3) return coords;
+  const xy = coords.map(flat(coords[0]));
+  const keep = new Uint8Array(coords.length);
+  keep[0] = keep[coords.length - 1] = 1;
+  const stack = [[0, coords.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    let far = -1;
+    let max = tol;
+    const [ax, ay] = xy[a];
+    const dx = xy[b][0] - ax;
+    const dy = xy[b][1] - ay;
+    const len2 = dx * dx + dy * dy || 1e-9;
+    for (let i = a + 1; i < b; i++) {
+      const t = Math.max(0, Math.min(1, ((xy[i][0] - ax) * dx + (xy[i][1] - ay) * dy) / len2));
+      const d = Math.hypot(xy[i][0] - (ax + t * dx), xy[i][1] - (ay + t * dy));
+      if (d > max) { max = d; far = i; }
+    }
+    if (far >= 0) { keep[far] = 1; stack.push([a, far], [far, b]); }
+  }
+  return coords.filter((_, i) => keep[i]);
+}

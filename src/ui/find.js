@@ -209,17 +209,17 @@ export function buildFind() {
     );
   }
 
-  const updateOnly = () => {
-    for (const el of cards.children) el.classList.toggle('sel', el.dataset.key === state.selectedId);
+  const markHover = () => {
+    for (const el of root.querySelectorAll('.card')) el.classList.toggle('hl', el.dataset.key === state.hoverId);
   };
   bus.addEventListener('results', render);
   bus.addEventListener('mode', () => state.mode === 'find' && render());
   bus.addEventListener('select', () => {
     if (state.userPicked) collapse(true);
     render();
-    cards.querySelector('.card.sel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    root.querySelector('.card.sel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
-  bus.addEventListener('hover', updateOnly);
+  bus.addEventListener('hover', markHover);
   render();
   root.refresh = render;
   return root;
