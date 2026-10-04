@@ -5,9 +5,9 @@ import { settings, save, emit, fmtDistShort } from './settings.js';
 import { h, icon, iconBtn, seg, toggle, toast, statsRow, surfaceBar, profileBox, splitsTable } from './ui.js';
 import { closestOnPath, bounds, cumulative, pointAtDistance } from './geo.js';
 import { splits } from './stats.js';
+import { usingOrs } from './routing.js';
 import { saveRoute, shareHash } from './storage.js';
 import { toGPX, download, safeName, parseGPX } from './gpx.js';
-import * as ors from './ors.js';
 
 export const route = new Route();
 const LINE = '#ff5a1f';
@@ -69,8 +69,10 @@ class PlanLayer {
       const ll = g.getLatLng();
       route.waypoints[this.dragIdx] = [ll.lat, ll.lng];
       this.renderLines();
+      this.liveRoute();
     });
     g.on('dragend', () => {
+      clearTimeout(this.liveTimer);
       const ll = g.getLatLng();
       this.draggingGhost = false;
       const idx = this.dragIdx;
@@ -101,16 +103,29 @@ class PlanLayer {
   // ---- rendering ----
   render() {
     this.renderLines();
+    if (this.dragIdx >= 0) return; // never rebuild markers under a finger mid-drag
     this.renderMarkers();
     this.renderKms();
+  }
+
+  /** While dragging, re-route the touched legs about twice a second so the line follows the pointer. */
+  liveRoute() {
+    const now = Date.now();
+    clearTimeout(this.liveTimer);
+    const gap = usingOrs() ? 700 : 1100; // be kind to the free public router
+    if (now - (this.lastLive || 0) > gap) {
+      this.lastLive = now;
+      route.refresh();
+    } else {
+      this.liveTimer = setTimeout(() => { this.lastLive = Date.now(); route.refresh(); }, 350);
+    }
   }
 
   renderLines() {
     this.lines.clearLayers();
     const wps = route.waypoints;
     route.legs.forEach((leg, i) => {
-      const rubber = i === this.dragIdx || i === this.dragIdx - 1;
-      if (leg.status === 'ok' && !rubber) {
+      if (leg.status === 'ok') {
         const ll = leg.coords;
         L.polyline(ll, { color: '#fff', weight: 9, opacity: 0.9, pane: 'routes', interactive: false, lineCap: 'round' }).addTo(this.lines);
         const line = L.polyline(ll, {
@@ -122,9 +137,10 @@ class PlanLayer {
         line.on('click', hover); // touch: tap the line to get a draggable handle
         line.on('mouseout', () => this.scheduleHide());
       } else {
+        // not routed yet: show a straight "rubber band" immediately so every tap gets instant feedback
         const bad = leg.status === 'error';
         L.polyline([wps[i], wps[i + 1]], {
-          color: bad ? '#d7263d' : '#555', weight: 4, dashArray: '8 8', opacity: 0.8, pane: 'routes', interactive: false,
+          color: bad ? '#d7263d' : LINE, weight: bad ? 4 : 5, dashArray: bad ? '8 8' : '2 9', opacity: bad ? 0.85 : 0.75, lineCap: 'round', pane: 'routes', interactive: false,
         }).addTo(this.lines);
       }
     });
@@ -146,8 +162,10 @@ class PlanLayer {
         const ll = m.getLatLng();
         wps[i] = [ll.lat, ll.lng];
         this.renderLines();
+        this.liveRoute();
       });
       m.on('dragend', () => {
+        clearTimeout(this.liveTimer);
         this.dragIdx = -1;
         route.moveWaypoint(i, wps[i]);
       });
@@ -237,7 +255,6 @@ export function buildPlanPanel(root) {
         h('div', { class: 'empty' },
           h('p', null, h('b', null, n ? 'Routing…' : 'Tap the map to drop your start point.')),
           h('p', { class: 'muted' }, 'Keep tapping to extend the route. Drag any point or the line itself to reshape it. Switch to Free draw for ovals, grass and parks.'),
-          ors.hasKey() ? null : h('p', { class: 'warn' }, 'Add your OpenRouteService key in Settings so routes can snap to paths.'),
         ),
         importRow(),
       );
@@ -316,7 +333,7 @@ export function buildPlanPanel(root) {
     }
   }
 
-  route.addEventListener('change', () => root.isConnected && !root.hidden && draw());
+  route.addEventListener('change', () => root.isConnected && !root.hidden && planLayer.dragIdx < 0 && draw());
   route.addEventListener('error', (e) => toast(e.detail, 5000));
   draw();
   return { draw };

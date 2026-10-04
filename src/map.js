@@ -28,20 +28,23 @@ map.on('moveend', () => {
 });
 
 const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const TILE_OPTS = { updateWhenIdle: false, updateWhenZooming: false, keepBuffer: 3 };
+// 'light' and 'dark' are the same OSM tiles restyled with a CSS filter (see style.css), so no extra tile provider is needed.
 const BASEMAPS = {
+  light: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', opts: { maxZoom: 19, attribution: OSM } },
   osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', opts: { maxZoom: 19, attribution: OSM } },
   topo: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', opts: { maxZoom: 17, subdomains: 'abc', attribution: OSM + ', SRTM | &copy; <a href="https://opentopomap.org">OpenTopoMap</a>' } },
-  light: { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', opts: { maxZoom: 20, subdomains: 'abcd', attribution: OSM + ' &copy; CARTO' } },
-  dark: { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opts: { maxZoom: 20, subdomains: 'abcd', attribution: OSM + ' &copy; CARTO' } },
+  dark: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', opts: { maxZoom: 19, attribution: OSM } },
 };
-export const BASEMAP_LABELS = { osm: 'Street', topo: 'Terrain (contours)', light: 'Light', dark: 'Dark' };
+export const BASEMAP_LABELS = { light: 'Clean (best for routes)', osm: 'Street detail', topo: 'Terrain (contours)', dark: 'Dark' };
 
 let base;
 export function setBasemap(name) {
   const def = BASEMAPS[name] || BASEMAPS.osm;
   base?.remove();
-  base = L.tileLayer(def.url, def.opts).addTo(map);
+  base = L.tileLayer(def.url, { ...TILE_OPTS, ...def.opts }).addTo(map);
   base.bringToBack();
+  map.getContainer().className = map.getContainer().className.replace(/\bbm-\w+/g, '').trim() + ' bm-' + name;
   settings.basemap = name;
   save();
 }

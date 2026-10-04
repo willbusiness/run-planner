@@ -1,6 +1,6 @@
 // Suggested-route generator: invents loops and out-and-backs around a start point,
 // routes them with ORS, keeps ones that fit the distance/hills/surface wishes.
-import * as ors from './ors.js';
+import * as ors from './routing.js';
 import { elevations } from './elevation.js';
 import { destination, pathLength, overlap } from './geo.js';
 import { summarize, emptySurf, addSurf, hillClass } from './stats.js';
@@ -29,8 +29,8 @@ function loopShape(rand, theta, dir) {
   const cx = R * Math.sin((theta * Math.PI) / 180);
   const cy = R * Math.cos((theta * Math.PI) / 180);
   const pts = [];
-  for (const base of [90, 180, 270]) {
-    const a = ((theta + 180 + dir * (base + (rand() - 0.5) * 36)) * Math.PI) / 180;
+  for (const base of [60, 120, 180, 240, 300]) {
+    const a = ((theta + 180 + dir * (base + (rand() - 0.5) * 28)) * Math.PI) / 180;
     const r = R * (0.85 + rand() * 0.3);
     pts.push([cx + r * Math.sin(a), cy + r * Math.cos(a)]);
   }
@@ -83,7 +83,7 @@ async function routeCandidate(c, prefs) {
  * Generate suggestions. Calls onRoute(route) as each finishes; resolves with the final sorted list.
  * `isCancelled()` lets the caller abandon a stale search.
  */
-export async function generate({ start, prefs, count = 8, seed = Date.now(), onRoute, onProgress, isCancelled = () => false }) {
+export async function generate({ start, prefs, count = 6, seed = Date.now(), onRoute, onProgress, isCancelled = () => false }) {
   const rand = mulberry32(seed);
   const min = prefs.minKm * 1000;
   const max = Math.max(prefs.maxKm * 1000, min);
@@ -91,7 +91,7 @@ export async function generate({ start, prefs, count = 8, seed = Date.now(), onR
   const total = Math.ceil(want * 1.6);
 
   const { used, limit } = ors.usage();
-  if (used + total > limit * 0.97) throw new ors.RouteError('Daily OpenRouteService quota nearly used up. Try again tomorrow or plan by hand.');
+  if (ors.usingOrs() && used + total > limit * 0.97) throw new ors.RouteError('Daily OpenRouteService quota nearly used up. Try again tomorrow or plan by hand.');
 
   // 1. candidates: spread targets across the range, bearings around the compass
   const targets = Array.from({ length: total }, (_, i) => min + (max - min) * ((i + 0.5) / total));
@@ -106,7 +106,7 @@ export async function generate({ start, prefs, count = 8, seed = Date.now(), onR
   //    and rank the rest by how well their terrain relief fits the hills preference
   try {
     const all = cands.flatMap((c) => waypointsOf(c));
-    const ele = await elevations(all);
+    const ele = await Promise.race([elevations(all), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 1500))]);
     let k = 0;
     cands = cands.map((c) => {
       const w = waypointsOf(c);
@@ -163,7 +163,7 @@ export async function generate({ start, prefs, count = 8, seed = Date.now(), onR
       }
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all([worker(), worker(), worker(), worker()]);
   if (firstError && !results.length) throw firstError;
 
   // 4. best matches first: hills preference, then distance

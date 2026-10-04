@@ -5,7 +5,7 @@ const defaults = {
   orsKey: '',
   pace: 330, // goal pace, seconds per km
   units: 'km', // 'km' | 'mi'
-  basemap: 'osm', // 'osm' | 'topo' | 'light'
+  basemap: 'light', // 'light' | 'osm' | 'topo' | 'dark'
   layers: { trails: true, ovals: false, water: false, routes: true },
   prefs: {
     surface: 'mixed', // 'road' | 'mixed' | 'trail'
@@ -22,7 +22,9 @@ const defaults = {
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (saved.v !== 2) { delete saved.basemap; delete saved.layers; } // v2: calmer default map + overlays
     return {
+      v: 2,
       ...defaults,
       ...saved,
       layers: { ...defaults.layers, ...saved.layers },

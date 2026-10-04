@@ -13,11 +13,14 @@ export function overpass(query) {
     let lastErr;
     for (const url of ENDPOINTS) {
       try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 9000); // a slow server is as bad as a dead one
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(query),
-        });
+          signal: ctl.signal,
+        }).finally(() => clearTimeout(timer));
         if (res.ok) return (await res.json()).elements || [];
         lastErr = new Error('Overpass ' + res.status);
       } catch (e) {
@@ -49,7 +52,7 @@ export function surfaceClass(tags) {
 
 export async function fetchTrails(b) {
   const q = `[out:json][timeout:25];
-way["highway"~"^(path|footway|track|bridleway|pedestrian|cycleway)$"]["footway"!~"^(sidewalk|crossing)$"]["access"!~"^(private|no)$"]["foot"!="no"](${bb(b)});
+way["highway"~"^(path|footway|track|bridleway|pedestrian|cycleway)$"]["footway"!~"^(sidewalk|crossing)$"]["access"!~"^(private|no)$"]["foot"!="no"]["indoor"!="yes"]["tunnel"!="building_passage"](${bb(b)});
 out geom qt 5000;`;
   return (await overpass(q))
     .filter((e) => e.geometry)

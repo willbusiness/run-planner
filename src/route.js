@@ -1,6 +1,6 @@
 // The route being edited in Plan mode: waypoints, one leg between each pair, undo/redo.
 // A leg is either 'snap' (routed along paths by ORS) or 'free' (straight line, for ovals/grass/parks).
-import * as ors from './ors.js';
+import * as routing from './routing.js';
 import { withElevation } from './elevation.js';
 import { summarize, emptySurf, addSurf } from './stats.js';
 import { settings } from './settings.js';
@@ -176,7 +176,7 @@ export class Route extends EventTarget {
   /** Recompute any leg whose endpoints changed. Cheap to call; cached legs resolve instantly. */
   refresh() {
     const prefs = { ...settings.prefs };
-    const pk = ors.prefsKey(prefs);
+    const pk = routing.prefsKey(prefs);
     this.legs.forEach((leg, i) => {
       const a = this.waypoints[i];
       const b = this.waypoints[i + 1];
@@ -217,7 +217,7 @@ export class Route extends EventTarget {
         result = { coords, surf: { ...emptySurf(), dirt: 0, unknown: 0 } };
         result.surf.unknown = Math.hypot((b[0] - a[0]) * 111000, (b[1] - a[1]) * 93000);
       } else {
-        const [r] = await ors.route([a, b], prefs);
+        const [r] = await routing.route([a, b], prefs);
         result = r;
       }
       if (!this.legs.includes(leg) || leg.key !== key) return; // superseded by a newer edit

@@ -3,7 +3,7 @@ import { map, L, fitTo, setScrub } from './map.js';
 import { settings, save, emit, fmtDistShort, fmtTime, fmtElev } from './settings.js';
 import { h, icon, iconBtn, seg, toggle, toast, statsRow, surfaceBar, profileBox } from './ui.js';
 import { generate } from './loops.js';
-import * as ors from './ors.js';
+import * as ors from './routing.js';
 import { osmRoutes, overlayEvents } from './overlays.js';
 import { drawProfile } from './profile.js';
 import { withElevation } from './elevation.js';
@@ -14,7 +14,6 @@ import { Route } from './route.js';
 import { saveRoute } from './storage.js';
 import { toGPX, download, safeName } from './gpx.js';
 
-const COLORS = ['#ff5a1f', '#1f77ff', '#12a37f', '#c026d3', '#e5a100', '#e11d48', '#0891b2', '#7c3aed', '#65a30d', '#db2777'];
 const CACHE_KEY = 'runplanner.explore.v1';
 
 const S = {
@@ -32,7 +31,6 @@ const S = {
 const group = L.layerGroup();
 const lineLayers = new Map(); // id -> {casing, line, badge}
 let pin;
-const colorOf = (r) => r.color || (r.color = COLORS[(S.suggestions.indexOf(r) >= 0 ? S.suggestions.indexOf(r) : S.osm.indexOf(r) + 3) % COLORS.length]);
 
 function allRoutes() {
   return [...S.suggestions, ...S.osm];
@@ -47,30 +45,42 @@ function badgePoint(r) {
   return best;
 }
 
+const QUIET = '#5b7cfa';
+const ACCENT = '#ff5a1f';
+
 function drawMapRoutes() {
   group.clearLayers();
   lineLayers.clear();
   const sel = S.selected;
-  for (const r of allRoutes()) {
-    const color = colorOf(r);
-    const chains = r.source === 'osm' ? r.chains : [r.coords];
+  const list = allRoutes();
+  // draw unselected first so the selected route always sits on top
+  const order = [...list.filter((r) => r.id !== sel), ...list.filter((r) => r.id === sel)];
+  for (const r of order) {
     const isSel = r.id === sel;
-    const dim = sel && !isSel;
-    const casings = chains.map((c) => L.polyline(c, { color: '#fff', weight: isSel ? 10 : 7, opacity: dim ? 0.3 : 0.9, pane: 'routes', interactive: false }).addTo(group));
+    const osm = r.source === 'osm';
+    const chains = osm ? r.chains : [r.coords];
+    const color = isSel ? ACCENT : osm ? '#9a6bd1' : QUIET;
+    const casings = chains.map((c) => L.polyline(c, { color: '#fff', weight: isSel ? 10 : 6, opacity: isSel ? 0.95 : 0.7, pane: 'routes', interactive: false }).addTo(group));
     const lines = chains.map((c) => L.polyline(c, {
-      color, weight: isSel ? 6 : 4, opacity: dim ? 0.4 : 1, pane: 'routes', bubblingMouseEvents: false,
-      dashArray: r.source === 'osm' && !isSel ? '2 7' : null, lineCap: 'round',
+      color, weight: isSel ? 6 : 3.5, opacity: isSel ? 1 : sel ? 0.55 : 0.8, pane: 'routes', bubblingMouseEvents: false,
+      dashArray: osm && !isSel ? '1 6' : null, lineCap: 'round', lineJoin: 'round',
     }).on('click', () => select(r.id, { fit: false })).addTo(group));
-    const bp = badgePoint(r);
-    const km = fmtDistShort(r.source === 'osm' ? r.length : r.dist).replace(' ', '');
-    const badge = L.marker(bp, {
+    const n = osm ? null : S.suggestions.indexOf(r) + 1;
+    const label = osm ? fmtDistShort(r.length).replace(' ', '') : n;
+    const badge = osm && !isSel ? null : L.marker(badgePoint(r), {
       pane: 'handles', zIndexOffset: isSel ? 900 : 0, keyboard: false,
-      icon: L.divIcon({ className: '', html: `<div class="badge ${isSel ? 'sel' : ''}" style="background:${color}">${km}</div>`, iconSize: [54, 22], iconAnchor: [27, 11] }),
-    }).on('click', () => select(r.id, { fit: false })).addTo(group);
+      icon: L.divIcon({ className: '', html: `<div class="badge ${osm ? 'osm' : ''} ${isSel ? 'sel' : ''}">${label}</div>`, iconSize: [osm ? 46 : 24, 24], iconAnchor: [osm ? 23 : 12, 12] }),
+    })?.on('click', () => select(r.id, { fit: false })).addTo(group);
     lineLayers.set(r.id, { casings, lines, badge });
   }
-  if (sel && lineLayers.has(sel)) lineLayers.get(sel).lines.forEach((l) => l.bringToFront());
   drawPin();
+}
+
+/** Desktop hover on a card previews its line on the map. */
+function preview(id, on) {
+  const l = lineLayers.get(id);
+  if (!l || id === S.selected) return;
+  l.lines.forEach((x) => { x.setStyle({ color: on ? ACCENT : QUIET, weight: on ? 6 : 3.5, opacity: on ? 1 : S.selected ? 0.55 : 0.8 }); if (on) x.bringToFront(); });
 }
 
 function drawPin() {
@@ -119,16 +129,11 @@ function loadCache(start) {
 
 export async function search(start, { fresh = false, fit = true } = {}) {
   const id = ++S.genId;
+  touched = false;
   S.start = start;
   S.ref = start;
   S.selected = null;
   hideSearchPill();
-  if (!ors.hasKey()) {
-    S.suggestions = [];
-    S.status = { state: 'nokey', msg: '', done: 0, total: 0 };
-    refresh();
-    return;
-  }
   if (!fresh) {
     const cached = loadCache(start);
     if (cached?.length) {
@@ -146,13 +151,13 @@ export async function search(start, { fresh = false, fit = true } = {}) {
     const list = await generate({
       start,
       prefs: { ...settings.prefs },
-      count: 8,
+      count: 6,
       seed: fresh ? Date.now() : hashSeed(cacheKey(start)),
       isCancelled: () => id !== S.genId,
       onRoute: (r) => {
         if (id !== S.genId) return;
-        r.color = COLORS[S.suggestions.length % COLORS.length];
         S.suggestions.push(r);
+        if (!S.selected && S.suggestions.length === 1) { S.selected = r.id; ensureProfile(r); }
         refresh();
       },
       onProgress: (done, total) => {
@@ -163,6 +168,7 @@ export async function search(start, { fresh = false, fit = true } = {}) {
     });
     if (id !== S.genId) return;
     S.suggestions = list;
+    if (list.length && !list.some((r) => r.id === S.selected)) S.selected = list[0].id;
     S.status = { state: 'done', msg: list.length ? `${list.length} routes near here` : 'No routes fit those filters here. Widen the distance range or try another spot.', done: 0, total: 0 };
     if (list.length) saveCache(start, list);
     refresh();
@@ -180,9 +186,12 @@ function hashSeed(s) {
   return h >>> 0;
 }
 
+let touched = false; // has the user grabbed the map since the search began?
+['pointerdown', 'wheel', 'touchstart'].forEach((ev) => map.getContainer().addEventListener(ev, () => { touched = true; }, { passive: true }));
+
 function fitAll() {
   const pts = S.suggestions.flatMap((r) => r.coords);
-  if (!pts.length) return;
+  if (!pts.length || touched || !S.active) return;
   S.refPending = true;
   fitTo(bounds(pts));
 }
@@ -190,8 +199,9 @@ function fitAll() {
 // OSM relations -> route-like objects (elevation is fetched lazily when selected)
 function syncOsm() {
   S.osm = osmRoutes()
-    .filter((r) => r.length <= 80000)
-    .sort((a, b) => a.length - b.length)
+    .filter((r) => r.length >= 2500 && r.length <= 60000)
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 8)
     .map((r) => ({ id: 'osm' + r.id, source: 'osm', kind: 'osm', name: r.name, tags: r.tags, chains: r.chains, main: r.main, length: r.length, closed: r.closed, dist: r.length, an: null }));
   if (S.selected && !byId(S.selected)) S.selected = null;
   if (S.active) refresh();
@@ -269,8 +279,9 @@ function card(r) {
   const isSel = r.id === S.selected;
   const an = (r.sum || r).an;
   const spark = h('canvas', { class: 'spark' });
-  const el = h('button', { class: 'card' + (isSel ? ' sel' : ''), onclick: () => select(r.id) },
-    h('i', { class: 'swatch', style: `background:${colorOf(r)}` }),
+  const n = r.source === 'osm' ? null : S.suggestions.indexOf(r) + 1;
+  const el = h('button', { class: 'card' + (isSel ? ' sel' : ''), onclick: () => select(r.id), onmouseenter: () => preview(r.id, true), onmouseleave: () => preview(r.id, false) },
+    h('i', { class: 'num' + (r.source === 'osm' ? ' osm' : '') + (isSel ? ' sel' : '') }, n || '↗'),
     h('div', { class: 'card-main' },
       h('div', { class: 'card-title' }, titleOf(r)),
       h('div', { class: 'card-sub' },
@@ -289,7 +300,6 @@ function detail(r) {
   const tags = r.tags || {};
   const box = h('div', { class: 'detail' },
     h('div', { class: 'detail-head' },
-      h('i', { class: 'swatch', style: `background:${colorOf(r)}` }),
       h('div', null, h('div', { class: 'detail-title' }, titleOf(r)),
         h('div', { class: 'muted small' }, r.source === 'osm'
           ? ['Existing route (OpenStreetMap)', tags.network ? `network: ${tags.network}` : null, tags.operator].filter(Boolean).join(' · ')
@@ -365,7 +375,7 @@ function statusEl() {
   return h('div', { class: 'status ' + state },
     state === 'loading' ? h('span', { class: 'spinner' }) : null,
     h('span', null, msg || (state === 'idle' ? 'Pan the map, then press “Search here”.' : '')),
-    h('span', { class: 'quota', title: 'OpenRouteService requests used today' }, `${u.used}/${u.limit}`),
+    ors.usingOrs() ? h('span', { class: 'quota', title: 'OpenRouteService requests used today' }, `${u.used}/${u.limit}`) : null,
   );
 }
 
@@ -384,14 +394,6 @@ function draw() {
   );
   if (S.filtersOpen) rootEl.append(filters());
   rootEl.append(statusEl());
-
-  if (S.status.state === 'nokey') {
-    rootEl.append(h('div', { class: 'empty' },
-      h('p', null, h('b', null, 'Add a free routing key to generate routes.')),
-      h('p', { class: 'muted' }, 'Sign up at openrouteservice.org (free, 2,000 routes a day), create a token, and paste it in Settings. Existing routes from OpenStreetMap below work without it.'),
-      h('button', { class: 'btn primary', onclick: () => emit('settings') }, 'Open Settings'),
-    ));
-  }
 
   const sel = S.selected && byId(S.selected);
   if (sel) rootEl.append(detail(sel));
@@ -436,7 +438,7 @@ export function initExplore(root) {
     search([c.lat, c.lng], { fit: false });
   });
   window.addEventListener('ors-usage', () => S.active && rootEl.querySelector('.quota') && (rootEl.querySelector('.quota').textContent = `${ors.usage().used}/${ors.usage().limit}`));
-  window.addEventListener('keychanged', () => { if (S.status.state === 'nokey' || S.status.state === 'error') search(S.start, { fresh: false }); });
+  window.addEventListener('keychanged', () => { if (S.status.state === 'error') search(S.start, { fresh: false }); });
   window.addEventListener('settings-changed', () => S.active && refresh());
   syncOsm();
   draw();

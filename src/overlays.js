@@ -5,8 +5,9 @@ import { fetchTrails, fetchOvals, fetchWater, fetchRoutes } from './overpass.js'
 import { fmtDist } from './settings.js';
 import { h } from './ui.js';
 
-const CLASS_COLORS = { paved: '#7c8aa0', gravel: '#e0a526', dirt: '#9a5b25', unknown: '#a05cd6' };
-const MIN_ZOOM = { trails: 14, ovals: 13, water: 14, routes: 12 };
+// two looks only: soft green for sealed paths, brown dashes for dirt/gravel/unknown tracks (the stuff you'd trail-run)
+const UNPAVED = (t) => t.cls === 'gravel' || t.cls === 'dirt' || (t.cls === 'unknown' && (t.tags.highway === 'path' || t.tags.highway === 'track' || t.tags.highway === 'bridleway'));
+const MIN_ZOOM = { trails: 15, ovals: 13, water: 15, routes: 12 };
 const LOAD = { trails: fetchTrails, ovals: fetchOvals, water: fetchWater, routes: fetchRoutes };
 
 const state = {
@@ -45,13 +46,14 @@ function render(layer, data) {
   groups[layer] = g;
   if (layer === 'trails') {
     for (const t of data) {
+      const dirt = UNPAVED(t);
       const line = L.polyline(t.coords, {
         renderer: canvas,
         pane: 'overlays',
-        color: CLASS_COLORS[t.cls],
-        weight: t.tags.highway === 'footway' || t.tags.highway === 'cycleway' ? 2.5 : 3,
-        opacity: 0.85,
-        dashArray: t.tags.highway === 'path' || t.tags.highway === 'track' ? '5 4' : null,
+        color: dirt ? '#a9611f' : '#3da36b',
+        weight: dirt ? 2.5 : 2,
+        opacity: dirt ? 0.8 : 0.55,
+        dashArray: dirt ? '6 4' : null,
         interactive: state.mode !== 'plan',
       }).addTo(g);
       line.on('click', (e) => {
@@ -94,7 +96,7 @@ async function update(layer) {
   }
   const view = map.getBounds();
   if (loaded[layer]?.contains(view)) return;
-  const want = view.pad(0.3);
+  const want = view.pad(layer === 'trails' ? 0.1 : 0.25);
   const token = (tokens[layer] = (tokens[layer] || 0) + 1);
   overlayEvents.dispatchEvent(new CustomEvent('status', { detail: { layer, loading: true } }));
   try {

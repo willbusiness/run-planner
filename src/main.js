@@ -169,9 +169,9 @@ function openSettings() {
     h('div', { class: 'dlg' },
       h('div', { class: 'dlg-head' }, h('strong', null, 'Settings'), h('button', { class: 'ibtn', onclick: () => dlg.close(), 'aria-label': 'Close' }, icon('x', 18))),
       h('div', { class: 'pref' },
-        h('label', { for: 'key' }, 'OpenRouteService key'),
+        h('label', { for: 'key' }, 'OpenRouteService key (optional)'),
         h('div', { class: 'row' }, key, showKey),
-        h('p', { class: 'muted small' }, 'Free at ', h('a', { href: 'https://openrouteservice.org/dev/#/signup', target: '_blank', rel: 'noopener' }, 'openrouteservice.org'), '. Create a token and paste it here. It is stored only in this browser. Free tier: 2,000 routes/day.'),
+        h('p', { class: 'muted small' }, 'Free at ', h('a', { href: 'https://openrouteservice.org/dev/#/signup', target: '_blank', rel: 'noopener' }, 'openrouteservice.org'), '. Optional: without a key the app uses a free public router (BRouter). A key adds park/quiet-street preferences. Stored only in this browser. Free tier: 2,000 routes/day.'),
         h('div', { class: 'row' },
           h('button', { class: 'btn small', onclick: async () => {
             settings.orsKey = key.value.trim(); keyMsg.textContent = 'Testing…';
@@ -185,7 +185,7 @@ function openSettings() {
         h('select', { class: 'text', style: 'width:120px', onchange: (e) => { const old = settings.units; settings.units = e.target.value; save(); pace.value = fmtPace(settings.pace).split('/')[0]; emit('settings-changed'); } },
           h('option', { value: 'km', selected: settings.units === 'km' }, 'Kilometres'), h('option', { value: 'mi', selected: settings.units === 'mi' }, 'Miles'))),
       h('details', null, h('summary', null, 'About & credits'),
-        h('p', { class: 'small muted' }, 'Map data © OpenStreetMap contributors. Routing by OpenRouteService. Elevation from Open-Meteo / SRTM-based models; climb figures are approximate (±10%). Terrain tiles © OpenTopoMap. Light/dark tiles © CARTO.')),
+        h('p', { class: 'small muted' }, 'Map data © OpenStreetMap contributors. Routing by OpenRouteService / BRouter. Elevation from Open-Meteo / SRTM-based models; climb figures are approximate (±10%). Terrain tiles © OpenTopoMap. Light/dark tiles © CARTO.')),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => { saveAll(); dlg.close(); } }, 'Done')),
     ),
   );
@@ -215,7 +215,6 @@ if (shared) {
   try { t = localStorage.getItem(TAB_KEY) || 'explore'; } catch { /* ignore */ }
   switchTab(views[t] ? t : 'explore');
 }
-if (!settings.orsKey) setTimeout(() => !dlg.open && tab !== 'plan' && toast('Add your free OpenRouteService key in Settings to generate routes.', 6000), 1500);
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {});
