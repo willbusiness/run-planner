@@ -1,29 +1,33 @@
-// OpenRouteService directions client (free tier: 2000 req/day, 40 req/min).
+// OpenRouteService directions client. The free key we tested allows 200 requests/day (the response headers
+// say so), so the app only uses it for the runner's own edits, never for background route generation.
 import { settings } from './settings.js';
 import { haversine as hav } from './geo.js';
 
 const BASE = 'https://api.openrouteservice.org/v2/directions/';
-const DAILY_LIMIT = 2000;
 const PER_MINUTE = 36; // stay under the 40/min cap
 
-// ---- daily usage counter (resets by UTC date, like ORS) ----
-const USAGE_KEY = 'runplanner.orsUsage';
-export function usage() {
-  const today = new Date().toISOString().slice(0, 10);
+// ---- daily quota, as reported by ORS in its response headers ----
+const QUOTA_KEY = 'runplanner.orsQuota';
+/** {remaining, limit} for today, or null if we haven't heard from ORS yet. */
+export function quota() {
   try {
-    const u = JSON.parse(localStorage.getItem(USAGE_KEY) || '{}');
-    if (u.date === today) return { used: u.n, limit: DAILY_LIMIT };
+    const q = JSON.parse(localStorage.getItem(QUOTA_KEY) || 'null');
+    if (q && q.reset * 1000 > Date.now()) return q;
   } catch { /* ignore */ }
-  return { used: 0, limit: DAILY_LIMIT };
+  return null;
 }
-function countCall() {
-  const today = new Date().toISOString().slice(0, 10);
-  const n = usage().used + 1;
-  try {
-    localStorage.setItem(USAGE_KEY, JSON.stringify({ date: today, n }));
-  } catch { /* ignore */ }
+function readQuota(res) {
+  const limit = +res.headers.get('x-ratelimit-limit');
+  const remaining = +res.headers.get('x-ratelimit-remaining');
+  const reset = +res.headers.get('x-ratelimit-reset');
+  if (!limit || Number.isNaN(remaining)) return;
+  try { localStorage.setItem(QUOTA_KEY, JSON.stringify({ limit, remaining, reset })); } catch { /* ignore */ }
   window.dispatchEvent(new CustomEvent('ors-usage'));
 }
+export const usage = () => {
+  const q = quota();
+  return q ? { used: q.limit - q.remaining, limit: q.limit } : { used: 0, limit: 200 };
+};
 
 // ---- rate limiter: sliding one-minute window + small concurrency cap ----
 const stamps = [];
@@ -66,11 +70,11 @@ export function prefsKey(prefs) {
 
 function requestBody(points, prefs) {
   const options = {};
-  if (prefs.avoidStairs) options.avoid_features = ['steps', 'ferries'];
+  if (prefs.avoidStairs && !prefs.plain) options.avoid_features = ['steps'];
   const weightings = {};
   const green = prefs.green ? 0.8 : prefs.surface === 'mixed' ? 0.3 : prefs.surface === 'trail' ? 0.6 : 0;
-  if (green) weightings.green = { factor: green };
-  if (prefs.quiet) weightings.quiet = { factor: 0.7 };
+  if (green) weightings.green = green;
+  if (prefs.quiet) weightings.quiet = 0.7;
   if (Object.keys(weightings).length) options.profile_params = { weightings };
   return {
     coordinates: points.map((p) => [p[1], p[0]]),
@@ -90,7 +94,8 @@ async function post(profile, body, attempt = 0) {
   await acquire();
   let res;
   try {
-    countCall();
+    const q = quota();
+    if (q && q.remaining <= 3) throw new RouteError("OpenRouteService rate limit hit (today's quota is used up).");
     res = await fetch(BASE + profile + '/geojson', {
       method: 'POST',
       headers: { Authorization: settings.orsKey, 'Content-Type': 'application/json', Accept: 'application/geo+json' },
@@ -101,6 +106,7 @@ async function post(profile, body, attempt = 0) {
   } finally {
     release();
   }
+  readQuota(res);
   if (res.ok) return res.json();
   if (res.status === 429 && attempt < 2) {
     await new Promise((r) => setTimeout(r, 4000 * (attempt + 1)));
@@ -115,6 +121,7 @@ async function post(profile, body, attempt = 0) {
   } catch { /* ignore */ }
   if (res.status === 401 || res.status === 403) throw new RouteError('OpenRouteService rejected the key. Check it in Settings.');
   if (res.status === 429) throw new RouteError('OpenRouteService rate limit hit. Wait a minute or check your daily quota.');
+  if (res.status === 404 || code === 2009) throw new RouteError('No walkable route found between those points.');
   if (code === 2010) throw new RouteError('No road or path within 350 m of that point.');
   if (code === 2004) throw new RouteError('That route is too long for the free ORS limit.');
   if (code === 2009) throw new RouteError('No walkable route found between those points.');
@@ -131,10 +138,9 @@ export async function route(points, prefs) {
   try {
     data = await post(profile, requestBody(points, prefs));
   } catch (e) {
-    // Weightings are an optional nicety; if the server dislikes them retry plain.
-    if (e instanceof RouteError && /^Routing failed \(400\)/.test(e.message)) {
-      const plain = requestBody(points, { ...prefs, quiet: false, green: false, surface: 'road' });
-      data = await post(profile, plain);
+    // "avoid stairs" can make a route impossible and weightings can be refused: retry with plain options
+    if (e instanceof RouteError && /^Routing failed \(400\)|No walkable route/.test(e.message)) {
+      data = await post(profile, requestBody(points, { ...prefs, quiet: false, green: false, surface: 'road', plain: true }));
     } else throw e;
   }
   const f = data.features?.[0];

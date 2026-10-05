@@ -11,15 +11,15 @@ export { RouteError, usage } from './ors.js';
 export const usingOrs = () => !!settings.orsKey;
 
 const down = new Map(); // provider name -> time it may be tried again
-const providers = () => [
-  ...(settings.orsKey ? [['ors', ors]] : []),
+const providers = (prefs) => [
+  ...(settings.orsKey && !prefs.background && !prefs.fast ? [['ors', ors]] : []), // ORS has a small daily quota: only for the runner's settled edits
   ['valhalla', valhalla],
   ['brouter', brouter],
 ];
 
 export async function route(points, prefs) {
   let last;
-  const list = providers();
+  const list = providers(prefs);
   for (let i = 0; i < list.length; i++) {
     const [name, p] = list[i];
     const lastOne = i === list.length - 1;

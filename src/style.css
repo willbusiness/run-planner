@@ -279,11 +279,16 @@ dialog[open] { animation: fade 0.25s var(--ease); display: flex; flex-direction:
 
 /* ---------- narrow screens: panel becomes a bottom sheet (phone version comes next) ---------- */
 @media (max-width: 859px) {
-  #panel { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 62vh; border-radius: 26px 26px 0 0; }
-  .mapctl { bottom: calc(62vh + 12px); }
+  #panel { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: var(--sheet, 52vh); border-radius: 26px 26px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .grab { display: grid; place-items: center; height: 26px; flex: none; touch-action: none; cursor: grab; }
+  .grab span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+  .mapctl { bottom: calc(var(--sheet-h, 52vh) + 14px); transition: bottom 0.3s var(--ease); }
   .editbar { left: 50%; top: 12px; }
   .hero input { font-size: 52px; }
+  .phead { padding-top: 4px; }
+  .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 52vh) + 0px); }
 }
+@media (min-width: 860px) { .grab { display: none; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

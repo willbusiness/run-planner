@@ -199,11 +199,11 @@ export function buildFind() {
     sumText.textContent = `${fmtNum(toDisp(p.km))} ${mi() ? 'mi' : 'km'} · ${p.shape === 'loop' ? 'Loop' : 'Out & back'} · ${{ road: 'Roads', mixed: 'Mixed', trail: 'Trails' }[p.surface]} · ${{ flat: 'Flat', any: 'Any hills', hilly: 'Hilly' }[p.hills]}`;
     const list = state.results;
     syncList(cards, list, (r) => r.id, createCard, updateCard);
-    const busy = bank.busy;
+    const busy = bank.waiting || (!list.length && bank.busy);
     skels.replaceChildren(...(list.length === 0 && busy ? [1, 2, 3].map(() => h('div', { class: 'skel' })) : []));
     status.replaceChildren(busy ? h('span', { class: 'spin' }) : '', busy ? (list.length ? 'Finding more…' : 'Finding routes…') : `${list.length} route${list.length === 1 ? '' : 's'}`);
     note.replaceChildren(
-      ...(!settings.home ? [h('div', { class: 'note' }, h('span', { style: { flex: 1 } }, 'Set your own start and your routes will be ready the moment you open the app.'), h('button', { class: 'btn sm', type: 'button', onclick: () => openStartMenu(document.querySelector('.startpill')) }, 'Choose'))] : []),
+      ...(!settings.home ? [h('div', { class: 'note' }, h('span', { style: { flex: 1 } }, 'Set your own start and your routes will be ready the moment you open the app.'), h('button', { class: 'btn sm', type: 'button', onclick: (e) => openStartMenu(e.currentTarget, { asHome: true }) }, 'Choose'))] : []),
       ...(bank.error ? [h('div', { class: 'note err' }, 'The free routing server is busy. Retrying in a moment…')] : []),
       ...(list.length === 0 && !busy && !bank.error ? [h('div', { class: 'empty' }, h('b', null, 'No routes at this distance yet'), 'Try a different distance or surface, or tap More.')] : []),
     );

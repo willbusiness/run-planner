@@ -5,7 +5,7 @@ import { applyTheme } from '../theme.js';
 import { bank } from '../bank.js';
 import { bus, state, setStart, isHome } from '../app.js';
 import * as routing from '../routing.js';
-import { route as orsRoute } from '../ors.js';
+import { route as orsRoute, quota } from '../ors.js';
 
 export function openSettings() {
   let dlg = document.getElementById('settings');
@@ -26,7 +26,7 @@ export function openSettings() {
     test.disabled = true;
     try {
       await orsRoute([[-33.8975, 151.2335], [-33.896, 151.23]], { surface: 'mixed', avoidStairs: true });
-      toast('Key works');
+      toast('Key works. ' + (quota() ? `${quota().remaining} of ${quota().limit} requests left today.` : ''));
     } catch (e) {
       toast(e.message, 6000);
     }
@@ -50,7 +50,8 @@ export function openSettings() {
         seg([['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], settings.theme, (v) => { settings.theme = v; save(); applyTheme(); })),
       h('div', { class: 'group' }, h('h3', null, 'OpenRouteService key (optional)'),
         h('div', { class: 'row2' }, h('div', { style: { flex: 1, minWidth: '180px' } }, key), test),
-        h('p', null, 'Routing works without it using a free public server. A free key from openrouteservice.org adds quiet-street and park preferences and a second server to fall back on. It stays in this browser.')),
+        h('p', null, 'Routing works without it. A free key from openrouteservice.org adds park and quiet-street preferences when you edit a route (it has a small daily quota, so background route-finding never uses it). It stays in this browser.'),
+        ...(quota() ? [h('p', { style: { fontWeight: 600, color: 'var(--ink)' } }, `${quota().remaining} of ${quota().limit} requests left today`)] : [])),
       h('div', { class: 'group' }, h('h3', null, 'Data'),
         h('div', { class: 'row2' },
           h('button', { class: 'btn sm', type: 'button', onclick: () => { bank.clear(); toast('Making fresh routes…'); dlg.close(); } }, 'Rebuild suggestions')),

@@ -32,9 +32,10 @@ map.on('moveend', () => {
 mountPanel(document.getElementById('panel'));
 mountMapControls(document.getElementById('mapctl'));
 
-map.on('load', async () => {
-  setTrailsVisible(settings.trails);
-  await init();
+map.on('load', () => setTrailsVisible(settings.trails));
+
+// start loading routes right away; the map draws them as soon as its style is ready
+init().then(() => {
   const shared = parseShareHash(location.hash);
   if (shared) {
     const r = new Route();

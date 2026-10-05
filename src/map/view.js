@@ -35,7 +35,10 @@ export function createMap(container, { center, zoom, dark }) {
   for (const ev of ['pointerdown', 'wheel', 'touchstart']) container.addEventListener(ev, () => (touched = true), { passive: true });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   map.on('styleimagemissing', (e) => { if (e.id === 'chevron' && !map.hasImage('chevron')) map.addImage('chevron', chevronImage()); });
-  map.on('load', () => { if (!map.hasImage('chevron')) map.addImage('chevron', chevronImage()); });
+  map.on('load', () => {
+    if (!map.hasImage('chevron')) map.addImage('chevron', chevronImage());
+    for (const [id, f] of Object.entries(cache)) map.getSource(id)?.setData(FC(f)); // anything drawn before the style was ready
+  });
   return map;
 }
 

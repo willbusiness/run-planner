@@ -11,7 +11,7 @@ const file = `public/seed/${start[0].toFixed(3)}_${start[1].toFixed(3)}_${surfac
 const items = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : [];
 const LADDER = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 26, 28, 30, 33, 36, 39, 42];
 const OB = [5, 8, 10, 12, 15, 18, 21, 25, 30];
-const prefs = { surface, hills: 'any', quiet: false, green: false, avoidStairs: true };
+const prefs = { surface, hills: 'any', quiet: false, green: false, avoidStairs: true, background: true };
 const near = (r, kind, km) => r.kind === kind && Math.abs(r.dist - km * 1000) < Math.max(400, km * 60);
 const save = () => fs.writeFileSync(file, JSON.stringify(items));
 let seed = 90210;

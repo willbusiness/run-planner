@@ -72,6 +72,7 @@ class Bank extends EventTarget {
     this.surface = 'mixed';
     this.jobs = [];
     this.running = 0;
+    this.runningUrgent = 0;
     this.pausedUntil = 0;
     this.error = '';
     this.tried = new Map(); // bin -> attempts this session
@@ -85,6 +86,11 @@ class Bank extends EventTarget {
 
   get busy() {
     return this.running > 0 || this.jobs.length > 0;
+  }
+
+  /** Is the runner waiting on something specific (as opposed to quiet background top-ups)? */
+  get waiting() {
+    return this.runningUrgent > 0 || this.jobs.some((j) => j.urgent);
   }
 
   /** Point the bank at a start + surface. Loads what we saved earlier, then keeps filling. */
@@ -199,7 +205,7 @@ class Bank extends EventTarget {
 
   // ---- the worker ----
   pump() {
-    if (document.hidden) return;
+    if (document.hidden || this.hold) return; // `hold` while editing: the runner's own requests come first
     if (Date.now() < this.pausedUntil) {
       clearTimeout(this.wake);
       this.wake = setTimeout(() => this.pump(), this.pausedUntil - Date.now() + 50);
@@ -209,8 +215,10 @@ class Bank extends EventTarget {
       const job = this.jobs.shift();
       if (job.key !== this.key) continue;
       this.running++;
+      if (job.urgent) this.runningUrgent++;
       this.run(job).finally(() => {
         this.running--;
+        if (job.urgent) this.runningUrgent--;
         setTimeout(() => this.pump(), job.urgent ? 100 : 1800);
         this.emit();
       });
@@ -220,7 +228,7 @@ class Bank extends EventTarget {
 
   async run(job) {
     const start = this.start;
-    const prefs = { ...settings.prefs, surface: this.surface, hills: job.hills || 'any' };
+    const prefs = { ...settings.prefs, surface: this.surface, hills: job.hills || 'any', background: true };
     if (job.bin) this.tried.set(job.bin, (this.tried.get(job.bin) || 0) + 1);
     try {
       const rec = await makeRoute({ start, kind: job.kind, target: job.target, prefs, seed: (this.seed += 7919) });

@@ -1,10 +1,11 @@
 // The route editor: big live stats, elevation profile, tools, save/export. The map side is map/edit.js.
-import { h, icon, iconBtn, seg, toast } from './dom.js';
+import { h, icon, iconBtn, seg, toast, toggle } from './dom.js';
 import { Route } from '../route.js';
 import { editLayer } from '../map/edit.js';
 import { fitCoords } from '../map/routes.js';
 import { state, setMode, bus } from '../app.js';
-import { settings, fmtDistShort, fmtTime, KM_PER_MI } from '../settings.js';
+import { settings, save, fmtDistShort, fmtTime, KM_PER_MI } from '../settings.js';
+import { usingOrs } from '../routing.js';
 import { profileCanvas, surfaceBar, splitsTable } from './widgets.js';
 import { saveRoute, shareHash } from '../storage.js';
 import { toGPX, download, safeName, parseGPX } from '../gpx.js';
@@ -102,6 +103,10 @@ function buildEditor() {
         h('button', { class: 'btn sm', type: 'button', onclick: () => route.reverse() }, icon('flip', 16), 'Reverse'),
         h('button', { class: 'btn sm danger', type: 'button', onclick: () => route.clear() }, icon('trash', 16), 'Clear'),
       ),
+      ...(usingOrs() ? [h('div', { style: { marginTop: '6px' } },
+        toggle('Prefer parks and green paths', settings.prefs.green, (v) => { settings.prefs.green = v; save(); }),
+        toggle('Prefer quiet streets', settings.prefs.quiet, (v) => { settings.prefs.quiet = v; save(); }),
+        h('div', { class: 'hint', style: { padding: '2px 10px 0' } }, 'Applies to the next points you add or move.'))] : []),
     ),
     surf: h('div', { class: 'sect' }),
     splits: h('div', { class: 'sect' }),

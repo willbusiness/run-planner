@@ -116,7 +116,8 @@ export class Route extends EventTarget {
     if (this.waypoints.length < 2) return;
     this.push();
     this.waypoints.reverse();
-    this.legs = this.legs.reverse().map((l) => ({ ...l, coords: [...l.coords].reverse(), key: '' }));
+    this.legs = this.legs.reverse().map((l) => ({ ...l, coords: [...l.coords].reverse() }));
+    this.rekey();
     this.refresh();
   }
   closeLoop(mode = 'snap') {
@@ -133,9 +134,17 @@ export class Route extends EventTarget {
     for (let i = n - 2; i >= 0; i--) {
       const src = this.legs[i];
       this.waypoints.push([...this.waypoints[i]]);
-      this.legs.push(src.status === 'ok' ? { ...src, coords: [...src.coords].reverse(), key: '' } : this.pendingLeg(src.mode));
+      this.legs.push(src.status === 'ok' ? { ...src, coords: [...src.coords].reverse() } : this.pendingLeg(src.mode));
     }
+    this.rekey();
     this.refresh();
+  }
+
+  /** Give every finished leg the key for its current endpoints, so refresh() reuses it instead of asking the router again. */
+  rekey() {
+    this.legs.forEach((l, i) => {
+      if (l.status === 'ok') l.key = legKey(l.mode, this.waypoints[i], this.waypoints[i + 1]);
+    });
   }
 
   // ---- loading routes from elsewhere ----
@@ -202,6 +211,18 @@ export class Route extends EventTarget {
     this.changed();
   }
 
+  /** After a drag: redo legs that were only roughly routed while moving, with the full router and surface info. */
+  refine() {
+    const prefs = { ...settings.prefs, fast: false };
+    const pk = routing.prefsKey(prefs);
+    this.legs.forEach((leg, i) => {
+      if (leg.rough && leg.status === 'ok' && leg.mode === 'snap') {
+        leg.rough = false;
+        this.compute(leg, leg.key, this.waypoints[i], this.waypoints[i + 1], prefs, pk);
+      }
+    });
+  }
+
   /** Re-route every snapped leg with the current preferences. */
   rerouteAll() {
     this.legs.forEach((l) => {
@@ -230,8 +251,9 @@ export class Route extends EventTarget {
       }
       if (!this.legs.includes(leg) || leg.key !== key) return; // superseded by a newer edit
       if (!prefs.fast) cache.set(key + '|' + (leg.mode === 'snap' ? pk : ''), result); // quick drag results lack surface data
-      Object.assign(leg, result, { status: 'ok' });
+      Object.assign(leg, result, { status: 'ok', rough: !!prefs.fast });
       result.late?.then(() => this.legs.includes(leg) && this.changed()); // surface info arrives a moment later
+      if (prefs.fast && !this.fast) setTimeout(() => this.refine()); // the drag ended while this was in flight
     } catch (e) {
       if (e instanceof Superseded || !this.legs.includes(leg) || leg.key !== key) return;
       leg.status = 'error';

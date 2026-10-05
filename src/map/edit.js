@@ -104,6 +104,7 @@ class EditLayer {
         this.route.fast = false;
         setTimeout(() => (this.suppressClick = false), 50);
         this.route.moveWaypoint(i, wps[i]);
+        this.route.refine();
       });
       el.addEventListener('click', (e) => { e.stopPropagation(); this.menuFor(i, e); });
       this.markers.push(m);
@@ -190,6 +191,7 @@ class EditLayer {
       setTimeout(() => (this.suppressClick = false), 50);
       this.hideGhost();
       this.route.moveWaypoint(idx, [ll.lat, ll.lng]);
+      this.route.refine();
     });
     return (this.ghost = m);
   }

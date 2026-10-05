@@ -10,7 +10,8 @@ export const onRouteHover = (fn) => (hit.onHover = fn);
 /** Left inset so routes fit beside the floating panel (desktop) or above the sheet (phone). */
 export function mapPadding(extra = 56) {
   if (window.innerWidth >= 860) return { top: extra, bottom: extra, left: 408 + 32 + extra, right: extra };
-  return { top: extra, bottom: window.innerHeight * 0.62 + 16, left: 24, right: 24 };
+  const sheet = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-h')) || window.innerHeight * 0.52;
+  return { top: extra, bottom: Math.min(sheet, window.innerHeight * 0.6) + 16, left: 24, right: 24 };
 }
 
 export function fitCoords(coords, { duration = 800, extra = 56 } = {}) {

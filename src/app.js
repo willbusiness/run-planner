@@ -122,6 +122,8 @@ export function hover(id) {
 
 export function setMode(mode) {
   state.mode = mode;
+  bank.hold = mode === 'edit';
+  if (!bank.hold) bank.pump();
   document.body.classList.toggle('editing', mode === 'edit');
   if (mode === 'find') {
     state.hoverId = null;
