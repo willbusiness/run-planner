@@ -4,6 +4,7 @@
 import { makeRoute } from './loops.js';
 import { settings } from './settings.js';
 import { densify } from './geo.js';
+import { wiggleOf } from './clean.js';
 import { RouteError } from './routing.js';
 
 // ---- tiny IndexedDB key/value store ----
@@ -163,7 +164,10 @@ class Bank extends EventTarget {
     const share = (r, k) => (r.kinds?.[k] || 0) / Math.max(1, r.dist);
     const score = (r) => {
       let s = 1 - Math.abs(r.dist - T) / (tol * 1.8);
-      if (r.kind === 'loop') s += Math.min(1, r.q.compact / 0.5) * 0.5 - r.q.backtrack * 2 - Math.max(0, r.q.turns - 2) * 0.1;
+      if (r.kind === 'loop') {
+        r.q.wiggle ??= Math.round(wiggleOf(r.c)); // older saved routes don't have it yet
+        s += Math.min(1, r.q.compact / 0.5) * 0.4 - r.q.backtrack * 2 - Math.max(0, r.q.turns - 2) * 0.1 - Math.max(0, r.q.wiggle - 160) / 130;
+      }
       if (brief.hills === 'flat') s -= perKm(r) / 25;
       if (brief.hills === 'hilly') s += Math.min(1, perKm(r) / 20) * 0.6;
       if (brief.surface === 'trail') s += share(r, 'path') * 0.8;

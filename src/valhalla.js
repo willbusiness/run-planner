@@ -11,10 +11,10 @@ export class Superseded extends Error {}
 
 let inflight = 0;
 let nextAt = 0;
-const waiters = [];
+const queues = { hi: [], lo: [] }; // the runner's own requests (hi) go before background top-ups (lo)
 const SPACING = 550; // ms between request starts: polite to a free community server
-async function slot() {
-  while (inflight >= 2) await new Promise((r) => waiters.push(r));
+async function slot(background) {
+  while (inflight >= 2 || (background && queues.hi.length)) await new Promise((r) => (background ? queues.lo : queues.hi).push(r));
   inflight++;
   const at = Math.max(Date.now(), nextAt);
   nextAt = at + SPACING;
@@ -22,12 +22,12 @@ async function slot() {
 }
 const release = () => {
   inflight--;
-  waiters.shift()?.();
+  (queues.hi.shift() || queues.lo.shift())?.();
 };
 
-async function post(path, body, stale) {
+async function post(path, body, stale, background = false) {
   for (let attempt = 0; ; attempt++) {
-    await slot();
+    await slot(background);
     if (stale?.()) {
       release();
       throw new Superseded();
@@ -75,13 +75,15 @@ export function decode6(str) {
   return out;
 }
 
-/** Costing options for the runner's preferences. Valhalla's "pedestrian" profile knows footways, tracks and steps. */
+/**
+ * Costing options for the runner's preferences. Valhalla's "pedestrian" profile knows footways, bush tracks and steps.
+ * Without `use_tracks` and a higher hiking difficulty it simply refuses most walking tracks.
+ */
 function costing(prefs) {
-  const o = { step_penalty: prefs.avoidStairs === false ? 30 : 120 };
-  if (prefs.surface === 'trail') Object.assign(o, { walkway_factor: 0.6, sidewalk_factor: 2.0, use_tracks: 0.8 });
-  else if (prefs.surface === 'road') Object.assign(o, { walkway_factor: 1.5, use_tracks: 0 });
-  if (prefs.quiet) o.use_living_streets = 1;
-  return o;
+  const steps = prefs.avoidStairs === false ? 30 : 90;
+  if (prefs.surface === 'trail') return { walkway_factor: 0.5, sidewalk_factor: 2.0, use_tracks: 1, max_hiking_difficulty: 5, step_penalty: 30 };
+  if (prefs.surface === 'road') return { walkway_factor: 1.5, use_tracks: 0, step_penalty: steps, ...(prefs.quiet ? { use_living_streets: 1 } : {}) };
+  return { use_tracks: 0.5, max_hiking_difficulty: 2, step_penalty: steps, ...(prefs.quiet ? { use_living_streets: 1 } : {}) };
 }
 
 /** Interpolate the 30 m elevation samples onto each vertex of a leg. */
@@ -103,14 +105,14 @@ const surfaceOf = (s) => (!s ? 'unknown' : s.startsWith('paved') ? 'paved' : s =
 const kindOf = (e) => (PATH_USE.has(e.use) ? 'path' : e.use === 'road' && MAIN_CLASS.has(e.road_class) ? 'main' : 'street');
 
 /** Fill each leg's `surf` and `kinds` (metres) in place from the matched edges. */
-async function fillAttributes(coords, offsets, legs, stale) {
+async function fillAttributes(coords, offsets, legs, stale, background) {
   try {
     const j = await post('/trace_attributes', {
       shape: coords.map((c) => ({ lat: c[0], lon: c[1] })),
       costing: 'pedestrian',
       shape_match: 'map_snap',
       filters: { attributes: ['edge.surface', 'edge.use', 'edge.road_class', 'edge.length', 'edge.begin_shape_index'], action: 'include' },
-    }, stale);
+    }, stale, background);
     for (const l of legs) { l.surf.unknown = 0; l.kinds.street = 0; }
     for (const e of j.edges || []) {
       let leg = offsets.findIndex((o, n) => n > 0 && (e.begin_shape_index ?? 0) < o) - 1;
@@ -134,7 +136,7 @@ export async function route(points, prefs) {
     directions_options: { units: 'kilometers' },
     elevation_interval: 30,
   };
-  const j = await post('/route', body, prefs.stale);
+  const j = await post('/route', body, prefs.stale, prefs.background);
   const legsRaw = j.trip?.legs;
   if (!legsRaw?.length) throw new RouteError('No route returned.');
   const legs = legsRaw.map((l) => withElevation(decode6(l.shape), l.elevation, l.elevation_interval || 30));
@@ -149,7 +151,7 @@ export async function route(points, prefs) {
     const all = legs.flatMap((c, i) => (i ? c.slice(1) : c));
     const offsets = [0];
     legs.forEach((c, i) => offsets.push(offsets[i] + c.length - (i ? 1 : 0)));
-    const late = fillAttributes(all, offsets, out, prefs.stale);
+    const late = fillAttributes(all, offsets, out, prefs.stale, prefs.background);
     out.forEach((l) => Object.defineProperty(l, 'late', { value: late, enumerable: false }));
   }
   return out;
@@ -175,4 +177,16 @@ export async function directions(points, prefs) {
     }
   });
   return out;
+}
+
+/** Walking distance in km between each consecutive pair of points (one cheap request), or null if unavailable. */
+export async function legLengths(points, prefs) {
+  try {
+    const loc = points.map((p) => ({ lat: p[0], lon: p[1] }));
+    const j = await post('/sources_to_targets', { sources: loc.slice(0, -1), targets: loc.slice(1), costing: 'pedestrian', costing_options: { pedestrian: costing(prefs) }, units: 'kilometers' }, undefined, true);
+    const out = points.slice(1).map((_, i) => j.sources_to_targets?.[i]?.[i]?.distance);
+    return out.every((d) => typeof d === 'number') ? out : null;
+  } catch {
+    return null;
+  }
 }

@@ -8,7 +8,6 @@ import { routeFromRecord } from '../recroute.js';
 import { saveRoute } from '../storage.js';
 import { toGPX, download, safeName } from '../gpx.js';
 import { openEditor } from './editor.js';
-import { openStartMenu } from './startmenu.js';
 
 const PRESETS = [5, 10, 15, 21.1, 30, 42.2];
 const MIN_KM = 2;
@@ -131,7 +130,7 @@ export function buildFind() {
 
   // ---- results ----
   const status = h('div', { class: 'stat' });
-  const title = h('h2', null, 'Routes for you');
+  const title = h('h2', null, 'Suggested routes');
   const note = h('div');
   const cards = h('div', { class: 'cards' });
   const skels = h('div', { class: 'cards' });
@@ -144,8 +143,7 @@ export function buildFind() {
   };
   sum.hidden = true;
   const tools = h('div', { class: 'tools' },
-    h('button', { class: 'linkbtn', type: 'button', title: 'Draw your own route', onclick: () => openEditor(null) }, icon('pencil', 16), 'Draw'),
-    h('button', { class: 'linkbtn', type: 'button', title: 'Find more routes like these', onclick: () => { bank.request(settings.prefs, 10); toast('Finding more routes…'); } }, icon('shuffle', 16)),
+    h('button', { class: 'linkbtn', type: 'button', title: 'Find more routes like these', onclick: () => { bank.request(settings.prefs, 10); toast('Finding more routes…'); } }, icon('shuffle', 16), 'More'),
   );
   const root = h('div', { class: 'view find' }, sum, wrap, h('div', { class: 'rhead' }, title, status, tools), note, cards, skels);
 
@@ -203,7 +201,6 @@ export function buildFind() {
     skels.replaceChildren(...(list.length === 0 && busy ? [1, 2, 3].map(() => h('div', { class: 'skel' })) : []));
     status.replaceChildren(busy ? h('span', { class: 'spin' }) : '', busy ? (list.length ? 'Finding more…' : 'Finding routes…') : `${list.length} route${list.length === 1 ? '' : 's'}`);
     note.replaceChildren(
-      ...(!settings.home ? [h('div', { class: 'note' }, h('span', { style: { flex: 1 } }, 'Set your own start and your routes will be ready the moment you open the app.'), h('button', { class: 'btn sm', type: 'button', onclick: (e) => openStartMenu(e.currentTarget, { asHome: true }) }, 'Choose'))] : []),
       ...(bank.error ? [h('div', { class: 'note err' }, 'The free routing server is busy. Retrying in a moment…')] : []),
       ...(list.length === 0 && !busy && !bank.error ? [h('div', { class: 'empty' }, h('b', null, 'No routes at this distance yet'), 'Try a different distance or surface, or tap More.')] : []),
     );

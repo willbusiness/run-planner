@@ -18,14 +18,15 @@ export function openSettings() {
     const v = parsePace(pace.value);
     if (v && v >= 120 && v <= 900) { settings.pace = v; save(); bus.dispatchEvent(new Event('results')); } else pace.value = fmtPace(settings.pace).replace(/\/.*/, '');
   } });
-  const key = h('input', { class: 'input', type: 'password', placeholder: 'Paste your free key (optional)', value: settings.orsKey, autocomplete: 'off', onchange: () => { settings.orsKey = key.value.trim(); save(); toast(settings.orsKey ? 'Key saved on this device' : 'Key removed'); } });
+  const key = h('input', { class: 'input', type: 'password', placeholder: 'Paste your free key (optional)', value: settings.orsKey, autocomplete: 'off', onchange: () => { settings.orsKey = key.value.trim(); save(); window.dispatchEvent(new Event('keychange')); toast(settings.orsKey ? 'Key saved on this device' : 'Key removed'); } });
   const test = h('button', { class: 'btn sm', type: 'button', onclick: async () => {
     settings.orsKey = key.value.trim();
     save();
+    window.dispatchEvent(new Event('keychange'));
     if (!settings.orsKey) return toast('Paste a key first');
     test.disabled = true;
     try {
-      await orsRoute([[-33.8975, 151.2335], [-33.896, 151.23]], { surface: 'mixed', avoidStairs: true });
+      await orsRoute([[-33.8066, 151.2471], [-33.8056, 151.2461]], { surface: 'mixed', avoidStairs: true });
       toast('Key works. ' + (quota() ? `${quota().remaining} of ${quota().limit} requests left today.` : ''));
     } catch (e) {
       toast(e.message, 6000);

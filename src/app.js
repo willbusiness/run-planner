@@ -5,7 +5,7 @@ import { settings, save } from './settings.js';
 import { map, revealSelected, mapTouched, resetTouched } from './map/view.js';
 import { drawResults, clearResults, fitCoords, setStartMarker, wireMapPicking, onRouteClick, onRouteHover } from './map/routes.js';
 
-export const DEFAULT_HOME = { lat: -33.8975, lng: 151.2335, name: 'Centennial Park' };
+export const DEFAULT_HOME = { lat: -33.8066, lng: 151.2471, name: 'Spit Bridge' };
 
 export const state = {
   mode: 'find', // 'find' | 'edit' | 'library'
@@ -20,7 +20,8 @@ export const state = {
 export const bus = new EventTarget();
 const emit = (name) => bus.dispatchEvent(new Event(name));
 
-export const isHome = () => !!settings.home && Math.abs(settings.home.lat - state.start[0]) < 1e-4 && Math.abs(settings.home.lng - state.start[1]) < 1e-4;
+export const homePoint = () => settings.home || DEFAULT_HOME;
+export const isHome = () => Math.abs(homePoint().lat - state.start[0]) < 1e-4 && Math.abs(homePoint().lng - state.start[1]) < 1e-4;
 export const selected = () => state.results.find((r) => r.id === state.selectedId) || null;
 
 let briefTimer;

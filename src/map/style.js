@@ -14,12 +14,12 @@ const LIGHT = {
   waterLine: '#b5d1e4',
   building: '#e9e7e1',
   buildingLine: '#e0ddd5',
-  roadMinor: '#ffffff',
-  roadMinorCase: '#e4e1d9',
-  roadMajor: '#ffffff',
-  roadMajorCase: '#d8d4ca',
-  motorway: '#fdf1d6',
-  motorwayCase: '#e6d3a0',
+  roadMinor: '#fdfcf9',
+  roadMinorCase: '#e9e6de',
+  roadMajor: '#fdfcf9',
+  roadMajorCase: '#dedacf',
+  motorway: '#fbefd2',
+  motorwayCase: '#e3d2a4',
   path: '#c7bfae',
   rail: '#d9d6cf',
   label: '#4b5563',
@@ -75,7 +75,9 @@ function overrides(p) {
     highway_motorway_casing: { 'line-color': p.motorwayCase },
     highway_motorway_inner: { 'line-color': p.motorway },
     highway_motorway_subtle: { 'line-color': p.motorwayCase },
-    railway: { 'line-color': p.rail },
+    highway_motorway_bridge_casing: { 'line-color': p.motorwayCase },
+    highway_motorway_bridge_inner: { 'line-color': p.motorway },
+    railway: { 'line-color': p.rail, 'line-width': ['interpolate', ['exponential', 1.3], ['zoom'], 14, 0.8, 20, 3] },
     'highway-name-path': { 'text-color': p.labelSoft, 'text-halo-color': p.halo },
     'highway-name-minor': { 'text-color': p.labelSoft, 'text-halo-color': p.halo, 'text-halo-width': 1.5 },
     'highway-name-major': { 'text-color': p.label, 'text-halo-color': p.halo, 'text-halo-width': 1.5 },
@@ -84,14 +86,14 @@ function overrides(p) {
     label_town: { 'text-color': p.label, 'text-halo-color': p.halo },
     label_city: { 'text-color': p.label, 'text-halo-color': p.halo },
     label_city_capital: { 'text-color': p.label, 'text-halo-color': p.halo },
-    water_name_point_label: { 'text-color': p.waterLabel, 'text-halo-color': p.halo },
+    water_name_point_label: { 'text-color': p.waterLabel, 'text-halo-color': p.halo, 'text-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14.5, 1] },
     water_name_line_label: { 'text-color': p.waterLabel, 'text-halo-color': p.halo },
     waterway_line_label: { 'text-color': p.waterLabel, 'text-halo-color': p.halo },
   };
 }
 
 // layers we drop: borders and far-zoom clutter we never use in a city runner's map
-const DROP = new Set(['boundary_3', 'boundary_2', 'boundary_disputed', 'airport', 'highway-shield-non-us', 'highway-shield-us-interstate', 'road_shield_us', 'label_country_3', 'label_country_2', 'label_country_1', 'label_state']);
+const DROP = new Set(['railway_transit', 'railway_transit_dashline', 'railway_service', 'railway_service_dashline', 'railway_dashline', 'boundary_3', 'boundary_2', 'boundary_disputed', 'airport', 'highway-shield-non-us', 'highway-shield-us-interstate', 'road_shield_us', 'label_country_3', 'label_country_2', 'label_country_1', 'label_state']);
 
 const empty = { type: 'FeatureCollection', features: [] };
 const FONT = ['Noto Sans Bold'];
@@ -114,7 +116,7 @@ function trailLayer(id, kind, color, dash) {
 /** Our own sources + layers, drawn above the basemap. Data is pushed in with source.setData(). */
 function routeLayers(dark) {
   const casing = dark ? '#0b0d10' : '#ffffff';
-  const alt = dark ? '#8da2c8' : '#51627f';
+  const alt = dark ? '#ff9d78' : '#ff8d61';
   return {
     sources: {
       alts: { type: 'geojson', data: empty },
@@ -130,10 +132,10 @@ function routeLayers(dark) {
       // the selected route: white casing, accent line
       { id: 'sel-casing', type: 'line', source: 'sel', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, casing, 1, casing], 'line-width': ZOOM_W(8, 13) } },
       { id: 'sel-line', type: 'line', source: 'sel', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, ACCENT, 1, ACCENT], 'line-width': ZOOM_W(5, 8) } },
-      { id: 'sel-arrows', type: 'symbol', source: 'sel', minzoom: 12.5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'icon-image': 'chevron', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 17, 0.62], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map' } },
+      { id: 'sel-arrows', type: 'symbol', source: 'sel', minzoom: 12.5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 130, 'icon-image': 'chevron', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 17, 0.62], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map' } },
       // legs still being routed or failed: dashed rubber band
       { id: 'pending-line', type: 'line', source: 'pending', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['case', ['==', ['get', 'state'], 'error'], '#e5484d', ACCENT], 'line-width': 3, 'line-dasharray': [0.1, 2.2], 'line-opacity': 0.95 } },
-      { id: 'km-labels', type: 'symbol', source: 'kms', minzoom: 11.5, layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-allow-overlap': false, 'text-padding': 8 }, paint: { 'text-color': dark ? '#f3f4f6' : '#111827', 'text-halo-color': casing, 'text-halo-width': 2.2 } },
+      { id: 'km-labels', type: 'symbol', source: 'kms', minzoom: 11.5, layout: { 'icon-image': 'km-badge', 'icon-text-fit': 'both', 'icon-text-fit-padding': [1, 5, 1, 5], 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 10.5, 'text-padding': 6, 'icon-padding': 4 }, paint: { 'text-color': dark ? '#f3f4f6' : '#14161a' } },
       // optional emphasised running paths (drawn from the map's own tiles)
       trailLayer('trail-paved', 'paved', dark ? '#6fcf97' : '#2fa36b', null),
       trailLayer('trail-dirt', 'other', dark ? '#d9a35b' : '#b9722a', [2, 1.4]),
@@ -158,6 +160,22 @@ export function buildStyle(theme = 'light') {
   style.layers.push(...mine.layers);
   style.glyphs = base.glyphs;
   return style;
+}
+
+/** Small rounded badge behind the km numbers (stretches to fit the text). */
+export function kmBadgeImage(dark) {
+  const s = 32;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.beginPath();
+  g.roundRect(2, 2, s - 4, s - 4, 12);
+  g.fillStyle = dark ? '#1f2329' : '#ffffff';
+  g.fill();
+  g.lineWidth = 2.5;
+  g.strokeStyle = ACCENT;
+  g.stroke();
+  return { image: g.getImageData(0, 0, s, s), options: { pixelRatio: 2, stretchX: [[12, 20]], stretchY: [[12, 20]], content: [10, 10, 22, 22] } };
 }
 
 /** Chevron used for the direction arrows along the selected route. */

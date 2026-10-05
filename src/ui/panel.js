@@ -1,15 +1,20 @@
-// The floating panel: header (start pill, library, settings) and a body that swaps between views.
-import { h, icon, iconBtn } from './dom.js';
+// The floating panel: start pill + settings, three tabs (Suggest / Draw / Saved), and a body that swaps views.
+import { h, icon, iconBtn, seg } from './dom.js';
 import { buildFind } from './find.js';
-import { state, bus, isHome } from '../app.js';
+import { state, bus, isHome, setMode } from '../app.js';
 import { openStartMenu } from './startmenu.js';
 import { openLibrary } from './library.js';
 import { openSettings } from './settings.js';
+import { openEditor, closeEditor, editing } from './editor.js';
+import { quota } from '../ors.js';
+import { settings } from '../settings.js';
 
 let body;
 let find;
+let tabs;
 let pillName;
 let pillTag;
+let foot;
 
 const phone = window.matchMedia('(max-width: 859px)');
 
@@ -22,7 +27,6 @@ function mountSheet(root) {
   const apply = (px, animate) => {
     root.style.transition = animate ? 'height 0.3s cubic-bezier(0.22, 1, 0.36, 1)' : 'none';
     height = px;
-    root.style.setProperty('--sheet', px + 'px');
     root.style.height = px + 'px';
     document.documentElement.style.setProperty('--sheet-h', px + 'px');
   };
@@ -53,7 +57,14 @@ function mountSheet(root) {
   });
   window.addEventListener('resize', set);
   if (phone.matches) apply(height, false);
-  root.expandSheet = () => phone.matches && height < snaps()[1] && apply(snaps()[1], true);
+}
+
+async function onTab(v) {
+  if (v === state.mode) return v === 'find' && showView(null);
+  if (editing() && !(await closeEditor(true, { next: 'none' }))) return tabs.set(state.mode); // cancelled: stay
+  if (v === 'find') { setMode('find'); showView(null); }
+  else if (v === 'edit') openEditor(null);
+  else openLibrary();
 }
 
 export function mountPanel(root) {
@@ -61,26 +72,41 @@ export function mountPanel(root) {
   pillName = h('b', null);
   const pill = h('button', { class: 'startpill', type: 'button', onclick: () => openStartMenu(pill) },
     h('span', { class: 'dot' }, icon('pin', 17)), h('span', { style: { minWidth: 0 } }, pillTag, pillName), h('span', { style: { color: 'var(--ink-3)', marginLeft: 'auto' } }, icon('down', 16)));
+  tabs = seg([['find', 'Suggest', 'route'], ['edit', 'Draw', 'pencil'], ['library', 'Saved', 'bookmark']], 'find', onTab, 'tabs');
   body = h('div', { class: 'pbody' });
+  foot = h('button', { class: 'pfoot', type: 'button', onclick: openSettings });
   root.append(
-    h('div', { class: 'phead', id: 'phead' }, pill, iconBtn('bookmark', 'My routes', openLibrary), iconBtn('gear', 'Settings', openSettings)),
+    h('div', { class: 'phead', id: 'phead' }, pill, iconBtn('gear', 'Settings', openSettings)),
+    h('div', { class: 'tabsrow' }, tabs),
     body,
+    foot,
   );
   find = buildFind();
   body.append(find);
   mountSheet(root);
+
   const paintPill = () => {
     pillName.textContent = state.startName;
     pillTag.textContent = isHome() ? 'Home' : 'Starting from';
   };
+  const paintFoot = () => {
+    const q = quota();
+    foot.hidden = !settings.orsKey;
+    if (!settings.orsKey) return;
+    foot.replaceChildren(h('i', { class: q && q.remaining < 20 ? 'low' : '' }), q ? `OpenRouteService · ${q.remaining} of ${q.limit} left today` : 'OpenRouteService key active');
+    foot.title = 'Your OpenRouteService requests left today. Click for settings.';
+  };
   bus.addEventListener('start', paintPill);
+  bus.addEventListener('mode', () => tabs.set(state.mode));
+  window.addEventListener('ors-usage', paintFoot);
+  window.addEventListener('keychange', paintFoot);
   paintPill();
+  paintFoot();
 }
 
-/** Show an element in the panel body, or the find screen when null. */
+/** Show an element in the panel body, or the Suggest screen when null. */
 export function showView(el) {
   const next = el || find;
-  document.getElementById('phead').hidden = !!el && el !== find;
   body.replaceChildren(next);
   body.scrollTop = 0;
   if (next === find) find.refresh();

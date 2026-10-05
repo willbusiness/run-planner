@@ -2,7 +2,7 @@
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'; // bundled with its dependencies by Vite
-import { buildStyle, chevronImage, gradientTo, ACCENT } from './style.js';
+import { buildStyle, chevronImage, kmBadgeImage, gradientTo, ACCENT } from './style.js';
 
 maplibregl.setWorkerUrl(workerUrl);
 
@@ -15,6 +15,15 @@ export const resetTouched = () => { touched = false; };
 
 const FC = (features) => ({ type: 'FeatureCollection', features });
 export const lineFeature = (coords, props = {}) => ({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: coords.map((c) => [c[1], c[0]]) } });
+
+/** Images used by our own layers; drawn on demand so they match the current theme. */
+function addImages(only) {
+  if ((!only || only === 'chevron') && !map.hasImage('chevron')) map.addImage('chevron', chevronImage());
+  if ((!only || only === 'km-badge') && !map.hasImage('km-badge')) {
+    const { image, options } = kmBadgeImage(theme === 'dark');
+    map.addImage('km-badge', image, options);
+  }
+}
 
 export function createMap(container, { center, zoom, dark }) {
   theme = dark ? 'dark' : 'light';
@@ -34,9 +43,9 @@ export function createMap(container, { center, zoom, dark }) {
   map.touchZoomRotate.disableRotation();
   for (const ev of ['pointerdown', 'wheel', 'touchstart']) container.addEventListener(ev, () => (touched = true), { passive: true });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
-  map.on('styleimagemissing', (e) => { if (e.id === 'chevron' && !map.hasImage('chevron')) map.addImage('chevron', chevronImage()); });
+  map.on('styleimagemissing', (e) => addImages(e.id));
   map.on('load', () => {
-    if (!map.hasImage('chevron')) map.addImage('chevron', chevronImage());
+    addImages();
     for (const [id, f] of Object.entries(cache)) map.getSource(id)?.setData(FC(f)); // anything drawn before the style was ready
   });
   return map;
@@ -54,7 +63,7 @@ export function setTheme(next) {
   theme = next;
   map.setStyle(buildStyle(theme), { diff: false });
   map.once('styledata', () => {
-    if (!map.hasImage('chevron')) map.addImage('chevron', chevronImage());
+    addImages();
     for (const [id, f] of Object.entries(cache)) map.getSource(id)?.setData(FC(f));
   });
 }

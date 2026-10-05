@@ -16,7 +16,7 @@ const near = (r, kind, km) => r.kind === kind && Math.abs(r.dist - km * 1000) < 
 const save = () => fs.writeFileSync(file, JSON.stringify(items));
 let seed = 90210;
 const todo = [
-  ...LADDER.flatMap((km) => Array.from({ length: Math.max(0, 4 - items.filter((r) => near(r, 'loop', km)).length) }, () => ['loop', km])),
+  ...LADDER.flatMap((km) => Array.from({ length: Math.max(0, 3 - items.filter((r) => near(r, "loop", km)).length) }, () => ['loop', km])),
   ...OB.flatMap((km) => Array.from({ length: Math.max(0, 2 - items.filter((r) => near(r, 'out&back', km)).length) }, () => ['out&back', km])),
 ];
 console.log(`${items.length} routes saved, ${todo.length} to make`);

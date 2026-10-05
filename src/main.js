@@ -3,7 +3,7 @@ import './style.css';
 import { createMap, setTrailsVisible, map } from './map/view.js';
 import { settings } from './settings.js';
 import { applyTheme, isDark } from './theme.js';
-import { init, state, bus, select } from './app.js';
+import { init, state, bus, select, DEFAULT_HOME } from './app.js';
 import { mountPanel } from './ui/panel.js';
 import { mountMapControls } from './ui/mapctl.js';
 import { openEditor, closeEditor, editing, undoRoute, redoRoute, currentRoute } from './ui/editor.js';
@@ -13,8 +13,8 @@ import { parseShareHash } from './storage.js';
 import { fitCoords } from './map/routes.js';
 import { bank } from './bank.js';
 
-const VIEW_KEY = 'runplanner.view.v1';
-const home = settings.home || { lat: -33.8975, lng: 151.2335 };
+const VIEW_KEY = 'runplanner.view.v2';
+const home = settings.home || DEFAULT_HOME;
 let view;
 try { view = JSON.parse(localStorage.getItem(VIEW_KEY)); } catch { /* first run */ }
 

@@ -3,6 +3,7 @@
 A free, personal route planner for running, in the spirit of Strava's route builder. Open it and your usual start
 is already there with routes ready to go.
 
+- **Three tabs:** Suggest (pick distance/time/pace, loop or out-and-back, roads/mixed/trails, flat or hilly and routes appear), Draw (build your own, or edit a suggestion), Saved.
 - **Find a run:** set distance (or time and pace), loop or out-and-back, roads/mixed/trails, flat or hilly. Routes come
   from a bank generated for your start point, saved in your browser and topped up in the background, so changing a filter is instant.
 - **Edit in place:** click the map to extend, drag any point or the line itself to reshape, undo/redo, close the loop, out-and-back,
@@ -15,6 +16,11 @@ is already there with routes ready to go.
 - Routing: the public [BRouter](https://brouter.de) server by default (free, no key, ~1 request per second is polite).
   Add an optional free [OpenRouteService](https://openrouteservice.org) key in Settings for quiet-street and park preferences.
 - Elevation for hand-drawn legs: Open-Meteo. Everything else runs in the browser.
+
+## Pre-made routes for your start
+`node scripts/seed.mjs <lat> <lng> [mixed|trail|road]` generates a bank of routes into `public/seed/` so a new device opens with
+routes already there (the default start is Spit Bridge). Routes are sized with real walking distances (Valhalla matrix), kept on land,
+spur-trimmed and scored for shape (compactness, backtracking, turning per km).
 
 ## Develop
 ```

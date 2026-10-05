@@ -1,6 +1,7 @@
 // Invents one loop or out-and-back around a start point: places waypoints on a ring, routes them,
 // cuts out dead-end spurs, then measures how clean the result is. The route bank calls this in the background.
 import * as routing from './routing.js';
+import * as valhalla from './valhalla.js';
 import { elevations } from './elevation.js';
 import { destination, pathLength } from './geo.js';
 import { summarize, emptySurf, addSurf, emptyKinds, addKinds, hillClass, estimateTime } from './stats.js';
@@ -58,19 +59,12 @@ function candidate(rand, kind, target, theta) {
 
 const waypointsOf = (start, c) => [start, ...c.shape.map(([x, y]) => toLL(start, x * c.scale, y * c.scale)), ...(c.kind === 'loop' ? [start] : [])];
 
-/** Route a candidate and turn it into one clean line plus waypoints that sit on that line. */
+/** Route a candidate and turn it into one clean line plus waypoints that sit on that line. Surface info follows via `finish`. */
 async function routeCandidate(start, c, prefs) {
   const wps = waypointsOf(start, c);
   const legs = await routing.route(c.kind === 'loop' ? wps : [wps[0], wps[1]], prefs);
-  await legs[0]?.late; // surface and path information (Valhalla fills it in a moment after the geometry)
-  const surf = emptySurf();
-  const kinds = emptyKinds();
   let raw = [];
-  for (const l of legs) {
-    raw.push(...(raw.length ? l.coords.slice(1) : l.coords));
-    addSurf(surf, l.surf);
-    addKinds(kinds, l.kinds);
-  }
+  for (const l of legs) raw.push(...(raw.length ? l.coords.slice(1) : l.coords));
   const rawLen = pathLength(raw);
   let coords = trimSpurs(raw);
   let outLen = pathLength(coords);
@@ -80,9 +74,6 @@ async function routeCandidate(start, c, prefs) {
     coords = [...coords, ...[...coords].reverse().slice(1)];
     points = [start, turn, start];
     outLen *= 2;
-    // surface of the way back equals the way out
-    for (const k of Object.keys(surf)) surf[k] *= 2;
-    for (const k of Object.keys(kinds)) kinds[k] *= 2;
   } else {
     // waypoints snapped onto the trimmed line, in order
     const idx = [0];
@@ -96,9 +87,17 @@ async function routeCandidate(start, c, prefs) {
     points[points.length - 1] = start;
   }
   const scale = (rawLen && c.kind === 'loop' ? outLen / rawLen : 1) || 1;
-  for (const k of Object.keys(surf)) surf[k] = Math.round(surf[k] * scale);
-  for (const k of Object.keys(kinds)) kinds[k] = Math.round(kinds[k] * scale);
-  return { coords, points, surf, kinds, dist: outLen };
+  const finish = async () => {
+    await legs[0]?.late; // Valhalla fills in surface and path info a moment after the geometry
+    const surf = emptySurf();
+    const kinds = emptyKinds();
+    for (const l of legs) { addSurf(surf, l.surf); addKinds(kinds, l.kinds); }
+    const mult = c.kind === 'out&back' ? 2 : scale; // the way back repeats the way out
+    for (const k of Object.keys(surf)) surf[k] = Math.round(surf[k] * mult);
+    for (const k of Object.keys(kinds)) kinds[k] = Math.round(kinds[k] * mult);
+    return { surf, kinds };
+  };
+  return { coords, points, dist: outLen, finish };
 }
 
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -121,66 +120,106 @@ export function splitLegs(coords, points, surf, kinds) {
  * Make one route near `start`. Returns a bank record or null if it didn't work out
  * (no path, wrong length, or an ugly shape).
  */
+/**
+ * Find a size for this shape so the walking distance through its points is about `target`.
+ * Water and peninsulas make distance jump around, so bracket the answer instead of chasing it.
+ * Resolves true (fits), false (can't be made to fit) or null (the distance service is unavailable).
+ */
+async function fitScale(start, c, target, prefs) {
+  let lo = 0;
+  let hi = Infinity;
+  for (let i = 0; i < 4; i++) {
+    const pts = waypointsOf(start, c);
+    const lens = await valhalla.legLengths(c.kind === 'loop' ? pts : pts.slice(0, 2), prefs);
+    if (!lens) return null;
+    // a little shorter than the sum of the legs: dead-end spurs get trimmed out afterwards
+    const predicted = lens.reduce((a, b) => a + b, 0) * 1000 * (c.kind === "out&back" ? 2 : 0.97);
+    globalThis.__RP_DEBUG && console.log('   predicted', Math.round(predicted), 'scale', c.scale.toFixed(2));
+    if (Math.abs(predicted - target) / target < 0.07) return true;
+    if (predicted < target) lo = Math.max(lo, c.scale);
+    else hi = Math.min(hi, c.scale);
+    c.scale = lo > 0 && Number.isFinite(hi) ? Math.sqrt(lo * hi) : c.scale * Math.min(2, Math.max(0.5, target / predicted));
+  }
+  return false;
+}
+
 export async function makeRoute({ start, kind, target, prefs, seed = Date.now() }) {
   const rand = mulberry32(seed);
   const theta = rand() * 360;
-  let c = candidate(rand, kind, target, theta);
 
-  // when the runner wants flat or hilly, try a few directions and keep the one whose terrain fits
-  if (prefs.hills !== 'any') {
-    try {
-      const options = Array.from({ length: 4 }, (_, i) => candidate(rand, kind, target, (theta + i * 90) % 360));
-      const lists = options.map((o) => waypointsOf(start, o));
-      const ele = await Promise.race([elevations(lists.flat()), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 1500))]);
-      let k = 0;
-      const scored = options.map((o, i) => {
-        const e = ele.slice(k, k + lists[i].length);
-        k += lists[i].length;
-        const relief = e.slice(1).reduce((s, v, j) => s + Math.abs(v - e[j]), 0) / (target / 1000);
-        return { o, relief, wet: e.some((v) => v != null && v <= 0.5) };
-      }).filter((x) => !x.wet);
-      if (scored.length) {
-        scored.sort((a, b) => (prefs.hills === 'flat' ? a.relief - b.relief : b.relief - a.relief));
-        c = scored[0].o;
-      }
-    } catch {
-      /* elevation is only a nicety here */
-    }
+  // try several shapes and keep ones whose waypoints are all on land (water makes huge detours);
+  // when the runner wants flat or hilly, prefer the ones whose terrain fits
+  let shapes = [candidate(rand, kind, target, theta)];
+  try {
+    const options = Array.from({ length: 6 }, (_, i) => candidate(rand, kind, target, (theta + i * 60) % 360));
+    const lists = options.map((o) => waypointsOf(start, o));
+    const ele = await Promise.race([elevations(lists.flat()), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 2000))]);
+    let k = 0;
+    const scored = options.map((o, i) => {
+      const e = ele.slice(k, k + lists[i].length);
+      k += lists[i].length;
+      const relief = e.slice(1).reduce((s, v, j) => s + Math.abs(v - e[j]), 0) / (target / 1000);
+      const wet = e.filter((v) => v != null && v <= 0.5).length;
+      return { o, relief, wet, r: rand() };
+    });
+    let pool = scored.filter((x) => x.wet === 0);
+    if (!pool.length) pool = [...scored].sort((a, b) => a.wet - b.wet).slice(0, 2);
+    if (prefs.hills === 'flat') pool.sort((a, b) => a.relief - b.relief);
+    else if (prefs.hills === 'hilly') pool.sort((a, b) => b.relief - a.relief);
+    else pool.sort((a, b) => a.r - b.r);
+    shapes = pool.map((x) => x.o);
+  } catch {
+    /* elevation is only a nicety here */
   }
+
+  // size the shape by real walking distances (cheap requests); try up to three shapes before paying for a route
+  let c = null;
+  for (const shape of shapes.slice(0, 3)) {
+    const fit = await fitScale(start, shape, target, prefs);
+    if (fit !== false) { c = shape; break; }
+  }
+  if (!c) return null;
 
   let r = await routeCandidate(start, c, prefs);
   const learn = (d) => {
     const ratio = d / (c.base * c.scale);
-    detour[kind] = Math.min(2, Math.max(1.05, detour[kind] * 0.6 + ratio * 0.4));
+    if (ratio < 1.05 || ratio > 2.6) return; // an outlier (water, a peninsula) says nothing about typical streets
+    detour[kind] = Math.min(2.2, Math.max(1.1, detour[kind] * 0.7 + ratio * 0.3));
     saveDetour();
   };
   if (kind === 'loop') learn(r.dist);
+  const dbg = (...a) => globalThis.__RP_DEBUG && console.log('  ', ...a);
+  dbg('first route', Math.round(r.dist), 'target', target, 'detour', detour[kind].toFixed(2));
+  if (Math.abs(r.dist - target) / target > 0.45) return null; // water or a peninsula made a long detour: don't waste more requests
   if (Math.abs(r.dist - target) / target > 0.1) {
     c.scale *= Math.min(1.6, Math.max(0.6, target / r.dist));
     r = await routeCandidate(start, c, prefs);
     if (kind === 'loop') learn(r.dist);
   }
+  dbg('after refine', Math.round(r.dist));
   if (Math.abs(r.dist - target) / target > 0.15) return null;
 
   const line = simplify(r.coords, 2);
   const q = shapeMetrics(line);
-  if (kind === 'loop' && (q.backtrack > 0.1 || q.compact < 0.28 || q.turnsPerKm > 3.5)) return null;
+  dbg('shape', JSON.stringify(q));
+  if (kind === 'loop' && (q.backtrack > 0.1 || q.compact < 0.15 || q.turnsPerKm > 3.5 || q.wiggle > 380)) return null;
 
-  const sum = summarize(line, r.surf, r.kinds);
+  const { surf, kinds } = await r.finish();
+  const sum = summarize(line, surf, kinds);
   return {
     id: `${kind[0]}${Math.round(r.dist)}-${seed.toString(36)}`,
     kind,
     surface: prefs.surface,
     wps: r.points.map((p) => [r5(p[0]), r5(p[1])]),
     c: line.map((p) => [r5(p[0]), r5(p[1]), p[2] == null ? null : r1(p[2])]),
-    surf: r.surf,
-    kinds: r.kinds,
+    surf,
+    kinds,
     dist: Math.round(sum.dist),
     gain: Math.round(sum.gain),
     loss: Math.round(sum.loss),
     gapKm: estimateTime(sum.an, 1),
     hills: hillClass(sum.gain, sum.dist),
-    q: { compact: +q.compact.toFixed(2), backtrack: +q.backtrack.toFixed(2), turns: +q.turnsPerKm.toFixed(1) },
+    q: { compact: +q.compact.toFixed(2), backtrack: +q.backtrack.toFixed(2), turns: +q.turnsPerKm.toFixed(1), wiggle: Math.round(q.wiggle) },
     t: Date.now(),
   };
 }

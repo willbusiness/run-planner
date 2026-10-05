@@ -141,7 +141,7 @@ export function shapeMetrics(coords) {
     if (d > 180) d = 360 - d;
     if (d > 55) turns++;
   }
-  return { compact, backtrack: back / pts.length, turnsPerKm: turns / (P / 1000) };
+  return { compact, backtrack: back / pts.length, turnsPerKm: turns / (P / 1000), wiggle: wiggleOf(coords) };
 }
 
 /** Index of the vertex nearest to `ll` at or after `from`. */
@@ -181,4 +181,30 @@ export function simplify(coords, tol = 2) {
     if (far >= 0) { keep[far] = 1; stack.push([a, far], [far, b]); }
   }
   return coords.filter((_, i) => keep[i]);
+}
+
+/**
+ * How "busy" a route looks: total turning per km (degrees), ignoring tiny jitter.
+ * A smooth loop is roughly 100-200; a staircase through a street grid is 300+.
+ */
+export function wiggleOf(coords) {
+  const xy = coords.map(flat(coords[0]));
+  const pts = [xy[0]];
+  let acc = 0;
+  for (let i = 1; i < xy.length; i++) {
+    acc += Math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1]);
+    if (acc >= 30) { pts.push(xy[i]); acc = 0; }
+  }
+  if (pts.length < 4) return 0;
+  const heads = [];
+  for (let i = 2; i < pts.length; i++) heads.push((Math.atan2(pts[i][0] - pts[i - 2][0], pts[i][1] - pts[i - 2][1]) * 180) / Math.PI);
+  let total = 0;
+  for (let i = 1; i < heads.length; i++) {
+    let d = Math.abs(heads[i] - heads[i - 1]);
+    if (d > 180) d = 360 - d;
+    if (d > 10) total += d;
+  }
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return total / Math.max(0.1, len / 1000);
 }

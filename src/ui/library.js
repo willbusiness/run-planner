@@ -20,8 +20,7 @@ function buildLibrary() {
   const list = h('div', { class: 'cards lib' });
   const file = h('input', { type: 'file', accept: '.json', hidden: true, onchange: restore });
   const head = h('div', { class: 'ehead' },
-    iconBtn('back', 'Back', () => { setMode('find'); showView(null); }),
-    h('div', { style: { flex: 1, fontSize: '17px', fontWeight: 650, padding: '0 8px' } }, 'My routes'),
+    h('div', { style: { flex: 1, fontSize: '17px', fontWeight: 650, padding: '0 10px' } }, 'Saved routes'),
     iconBtn('download', 'Export backup', () => { download('run-planner-backup.json', exportAll(), 'application/json'); }),
     iconBtn('upload', 'Import backup', () => file.click()),
     file,

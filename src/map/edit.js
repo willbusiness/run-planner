@@ -3,6 +3,31 @@
 import { map, setData, lineFeature, maplibregl } from './view.js';
 import { drawKms } from './routes.js';
 import { closestOnPath } from '../geo.js';
+
+const PATH_LAYERS = ['highway_path', 'trail-paved', 'trail-dirt'];
+
+/** If the click is on (or near) a footpath or bush track, return the exact point on it so routing starts on the track, not the road beside it. */
+function snapToPath(e) {
+  const r = 11;
+  const layers = PATH_LAYERS.filter((id) => map.getLayer(id));
+  const hits = layers.length ? map.queryRenderedFeatures([[e.point.x - r, e.point.y - r], [e.point.x + r, e.point.y + r]], { layers }) : [];
+  let best = null;
+  for (const f of hits) {
+    const lines = f.geometry.type === 'LineString' ? [f.geometry.coordinates] : f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : [];
+    for (const line of lines) {
+      for (let i = 1; i < line.length; i++) {
+        const a = map.project(line[i - 1]);
+        const b = map.project(line[i]);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy || 1e-9;
+        const t = Math.max(0, Math.min(1, ((e.point.x - a.x) * dx + (e.point.y - a.y) * dy) / len2));
+        const d = Math.hypot(e.point.x - (a.x + t * dx), e.point.y - (a.y + t * dy));
+        if (d <= r && (!best || d < best.d)) best = { d, ll: [line[i - 1][1] + t * (line[i][1] - line[i - 1][1]), line[i - 1][0] + t * (line[i][0] - line[i - 1][0])] };
+      }
+    }
+  }
+  return best?.ll || null;
+}
 import { usingOrs } from '../routing.js';
 import { showMenu, closeMenu } from '../ui/dom.js';
 
@@ -30,7 +55,7 @@ class EditLayer {
     this.mapClick = (e) => {
       if (this.suppressClick || e.originalEvent.target.closest('.maplibregl-marker')) return;
       closeMenu();
-      this.route.addWaypoint([e.lngLat.lat, e.lngLat.lng], this.addMode);
+      this.route.addWaypoint(this.addMode === 'snap' ? snapToPath(e) || [e.lngLat.lat, e.lngLat.lng] : [e.lngLat.lat, e.lngLat.lng], this.addMode);
     };
     this.mapMove = (e) => this.onMove(e);
     map.on('click', this.mapClick);

@@ -3,6 +3,7 @@ import { h, icon, iconBtn, seg, toast, toggle } from './dom.js';
 import { Route } from '../route.js';
 import { editLayer } from '../map/edit.js';
 import { fitCoords } from '../map/routes.js';
+import { setTrailsVisible } from '../map/view.js';
 import { state, setMode, bus } from '../app.js';
 import { settings, save, fmtDistShort, fmtTime, KM_PER_MI } from '../settings.js';
 import { usingOrs } from '../routing.js';
@@ -17,6 +18,11 @@ let root = null;
 let splitsOpen = false;
 let baseline = '';
 let lastSum = null; // shown (dimmed) while the route is re-routing, so the numbers don't flash to dashes
+
+/** Show the running-paths overlay whenever you are drawing on trails, or when it is switched on in the layers menu. */
+function syncTrails() {
+  setTrailsVisible(settings.trails || (!!route && settings.prefs.surface === 'trail'));
+}
 
 const snap = () => JSON.stringify(route.waypoints.map((p) => p.map((v) => +v.toFixed(5))));
 
@@ -34,6 +40,7 @@ export function openEditor(r, { fit = true } = {}) {
   editLayer.attach(route);
   editLayer.onRender = onRender;
   route.addEventListener('error', onError);
+  syncTrails();
   root = buildEditor();
   showView(root);
   if (fit && route.coords().length > 1) fitCoords(route.coords());
@@ -42,19 +49,22 @@ export function openEditor(r, { fit = true } = {}) {
 
 const onError = (e) => toast(e.detail, 5000);
 
-/** Leave the editor. Unsaved edits to a route ask first (unless `ask` is false). */
-export async function closeEditor(ask = true) {
-  if (!route) return;
+/** Leave the editor. Unsaved edits ask first (unless `ask` is false). Resolves false if the runner cancels. */
+export async function closeEditor(ask = true, { next = 'find' } = {}) {
+  if (!route) return true;
   if (ask && snap() !== baseline && !route.savedId) {
     const choice = await confirmDialog('Keep this route?', 'You have changes that are not saved yet.', 'Save', 'Discard');
-    if (choice === 'save') { doSave(); } else if (choice === 'cancel') return;
+    if (choice === 'cancel') return false;
+    if (choice === 'save') doSave();
   }
   route.removeEventListener('error', onError);
   editLayer.onRender = null;
   editLayer.detach();
   route = null;
   root = null;
-  if (ask) { setMode('find'); showView(null); }
+  syncTrails();
+  if (ask && next === 'find') { setMode('find'); showView(null); }
+  return true;
 }
 
 function confirmDialog(title, text, yes, no) {
@@ -88,7 +98,9 @@ function buildEditor() {
   const nameInput = h('input', { class: 'name', placeholder: 'Name this route', value: route.name || '', 'aria-label': 'Route name', oninput: (e) => { route.name = e.target.value; } });
   const undo = iconBtn('undo', 'Undo  ⌘Z', () => route.undo());
   const redo = iconBtn('redo', 'Redo  ⇧⌘Z', () => route.redo());
-  const mode = seg([['snap', 'Snap to paths', 'snap'], ['free', 'Free draw', 'free']], editLayer.addMode, (v) => { editLayer.addMode = v; });
+  const kind = seg([['road', 'Roads'], ['mixed', 'Mixed'], ['trail', 'Trails']], settings.prefs.surface, (v) => { settings.prefs.surface = v; save(); syncTrails(); if (v === 'trail') toast('Trails: prefers footpaths and bush tracks, allows steps.'); });
+  const mode = seg([['snap', 'Follow paths', 'snap'], ['free', 'Free draw', 'free']], editLayer.addMode, (v) => { editLayer.addMode = v; kindRow.hidden = v === 'free'; });
+  const kindRow = h('div', { style: { marginTop: '8px' } }, kind);
   els = {
     undo, redo, name: nameInput,
     stats: h('div', { class: 'bigstats' }),
@@ -97,6 +109,8 @@ function buildEditor() {
     tools: h('div', { class: 'sect' },
       h('h3', null, 'Draw'),
       mode,
+      kindRow,
+      h('div', { class: 'hint', style: { padding: '6px 2px 0' } }, 'Applies to points you add or move.'),
       h('div', { class: 'tools', style: { marginTop: '8px' } },
         h('button', { class: 'btn sm', type: 'button', onclick: () => route.closeLoop(editLayer.addMode) }, icon('loop', 16), 'Back to start'),
         h('button', { class: 'btn sm', type: 'button', onclick: () => route.outAndBack() }, icon('outback', 16), 'Out & back'),
@@ -125,7 +139,6 @@ function buildEditor() {
   );
   return h('div', { class: 'view editor' },
     h('div', { class: 'ehead' },
-      iconBtn('back', 'Back', () => closeEditor(true)),
       nameInput, undo, redo),
     els.stats, els.msg, els.chart, els.tools, els.surf, els.splits, els.dirs, els.actions);
 }

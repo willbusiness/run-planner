@@ -57,8 +57,16 @@ button { cursor: pointer; border: 0; background: none; padding: 0; }
   background: var(--panel); border-radius: 24px; box-shadow: var(--shadow);
   overflow: hidden;
 }
-.phead { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px 16px; }
+.phead { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px 14px; }
 .pbody { flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; padding-bottom: 20px; }
+.tabsrow { padding: 0 14px 10px; }
+.tabs { padding: 4px; border-radius: 14px; }
+.tabs .seg-btn { padding: 9px 6px; font-size: 13.5px; gap: 7px; border-radius: 10px; }
+.tabs .seg-btn.on { color: var(--accent); }
+.pfoot { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; font-weight: 550; text-align: left; flex: none; transition: color 0.15s; }
+.pfoot:hover { color: var(--ink-2); }
+.pfoot i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
+.pfoot i.low { background: var(--bad); }
 .view { animation: fade 0.28s var(--ease); }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
 
@@ -193,7 +201,7 @@ button { cursor: pointer; border: 0; background: none; padding: 0; }
 .note.err { background: color-mix(in srgb, var(--bad) 14%, var(--panel)); }
 
 /* ---------- editor ---------- */
-.ehead { display: flex; align-items: center; gap: 6px; padding: 14px 14px 6px 10px; }
+.ehead { display: flex; align-items: center; gap: 6px; padding: 4px 14px 6px 12px; }
 .ehead input.name { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; padding: 6px 8px; border-radius: 10px; }
 .ehead input.name:hover, .ehead input.name:focus { background: var(--panel-2); }
 .bigstats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px 20px 4px; }
